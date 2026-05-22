@@ -57,7 +57,8 @@ class ShimServer:
     async def responses(self, request: web.Request) -> web.StreamResponse:
         body = await request.json()
         _log_incoming_request("/v1/responses", body)
-        if str(body.get("model") or "").startswith("openai-gpt-5-5"):
+        model = str(body.get("model") or "")
+        if model == "gpt-5.5" or model.startswith("openai-gpt-5-5"):
             return await self._chatgpt_passthrough(request, body)
         route = self._route(body)
         if route.is_openai_chat:

@@ -61,9 +61,59 @@ def catalog_entry(model: FactoryModel) -> dict:
     }
 
 
+def chatgpt_passthrough_entry() -> dict:
+    """Catalog entry for the original GPT-5.5 routed through ChatGPT passthrough."""
+    return {
+        "slug": "gpt-5.5",
+        "display_name": "GPT-5.5",
+        "description": "OpenAI GPT-5.5 — the default Codex model, routed through ChatGPT passthrough.",
+        "context_window": 400000,
+        "max_context_window": 400000,
+        "auto_compact_token_limit": 320000,
+        "truncation_policy": {"mode": "tokens", "limit": 64000},
+        "default_reasoning_level": "medium",
+        "supported_reasoning_levels": [
+            {"effort": "minimal", "description": "Minimal reasoning"},
+            {"effort": "low", "description": "Faster, lighter reasoning"},
+            {"effort": "medium", "description": "Balanced"},
+            {"effort": "high", "description": "Deeper reasoning"},
+            {"effort": "xhigh", "description": "Maximum reasoning"},
+        ],
+        "default_reasoning_summary": "auto",
+        "reasoning_summary_format": "experimental",
+        "supports_reasoning_summaries": True,
+        "default_verbosity": "medium",
+        "support_verbosity": True,
+        "apply_patch_tool_type": "freeform",
+        "web_search_tool_type": "text_and_image",
+        "supports_search_tool": True,
+        "supports_parallel_tool_calls": True,
+        "experimental_supported_tools": [],
+        "input_modalities": ["text", "image"],
+        "supports_image_detail_original": True,
+        "shell_type": "shell_command",
+        "visibility": "list",
+        "minimal_client_version": "0.0.1",
+        "supported_in_api": True,
+        "availability_nux": None,
+        "upgrade": None,
+        "isDefault": True,
+        "priority": 10000,
+        "prefer_websockets": False,
+        "available_in_plans": PLAN_TIERS,
+        "base_instructions": "You are Codex, a coding agent powered by GPT-5.5.",
+        "model_messages": {
+            "instructions_template": "You are Codex, a coding agent powered by GPT-5.5.",
+            "instructions_variables": {"model_name": "GPT-5.5"},
+        },
+    }
+
+
 def write_catalog(models: list[FactoryModel], path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"models": [catalog_entry(model) for model in models]}
+    entries = [chatgpt_passthrough_entry()]
+    entries.extend(catalog_entry(model) for model in models)
+    payload = {"models": entries}
     path.write_text(json.dumps(payload, indent=2, sort_keys=False) + "\n")
     return path
 

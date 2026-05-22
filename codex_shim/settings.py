@@ -121,11 +121,6 @@ def _int_or_none(value: Any) -> int | None:
 
 def default_model_slug(models: list[FactoryModel]) -> str:
     if not models:
-        raise ValueError("No customModels found in Factory settings.")
-    preferred = ["gpt-5.5", "gpt-5.4", "claude-sonnet", "claude-opus"]
-    for needle in preferred:
-        for model in models:
-            haystack = f"{model.slug} {model.model} {model.display_name}".lower()
-            if needle in haystack:
-                return model.slug
-    return models[0].slug
+        return "gpt-5.5"
+    # Prefer the native ChatGPT passthrough slug first
+    return "gpt-5.5"
