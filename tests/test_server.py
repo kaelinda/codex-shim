@@ -57,6 +57,24 @@ async def test_responses_routes_to_openai_chat(tmp_path):
     await upstream_client.close()
 
 
+async def test_health_and_models_include_chatgpt_passthrough(tmp_path):
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"customModels": []}))
+    shim_client = TestClient(TestServer(ShimServer(settings).app()))
+    await shim_client.start_server()
+
+    health = await shim_client.get("/health")
+    assert health.status == 200
+    assert (await health.json())["models"] == 1
+
+    models = await shim_client.get("/v1/models")
+    assert models.status == 200
+    payload = await models.json()
+    assert [model["id"] for model in payload["data"]] == ["gpt-5.5"]
+
+    await shim_client.close()
+
+
 async def test_chat_routes_to_anthropic(tmp_path):
     captured = {}
 

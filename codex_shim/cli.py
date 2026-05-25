@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 import hashlib
+import json
 from urllib.request import urlopen
 
 from .catalog import codex_config_overrides, write_catalog, write_config
@@ -104,8 +105,21 @@ def main(argv: list[str] | None = None) -> int:
     return 2
 
 
+def _load_models(settings_path: Path):
+    expanded = Path(settings_path).expanduser()
+    try:
+        return FactorySettings(expanded).load()
+    except FileNotFoundError as exc:
+        raise SystemExit(
+            f"Settings file not found: {expanded}\n"
+            "Create it by saving custom models in Factory, or pass --settings /path/to/settings.json."
+        ) from exc
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"Settings file is not valid JSON: {expanded}: {exc}") from exc
+
+
 def generate(settings_path: Path, port: int) -> None:
-    models = FactorySettings(settings_path).load()
+    models = _load_models(settings_path)
     write_catalog(models, CATALOG_PATH)
     write_config(models, CONFIG_PATH, CATALOG_PATH, port)
     print(f"Generated {len(models)} model entries:")
@@ -115,7 +129,7 @@ def generate(settings_path: Path, port: int) -> None:
 
 
 def install_codex_config(settings_path: Path, port: int, model_slug: str | None = None) -> None:
-    models = FactorySettings(settings_path).load()
+    models = _load_models(settings_path)
     default_slug = _resolve_model_slug(models, model_slug)
     CODEX_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
@@ -132,10 +146,15 @@ def install_codex_config(settings_path: Path, port: int, model_slug: str | None 
 
 
 def list_models(settings_path: Path) -> int:
-    models = FactorySettings(settings_path).load()
-    width = max([len(m.slug) for m in models] + [4])
-    for model in models:
-        print(f"{model.slug:<{width}}  {model.display_name}  ->  {model.model} ({model.provider})")
+    models = _load_models(settings_path)
+    rows = [("gpt-5.5", "GPT-5.5", "gpt-5.5", "chatgpt")]
+    rows.extend((model.slug, model.display_name, model.model, model.provider) for model in models)
+    width = max([len(row[0]) for row in rows] + [4])
+    try:
+        for slug, display_name, model, provider in rows:
+            print(f"{slug:<{width}}  {display_name}  ->  {model} ({provider})", flush=True)
+    except BrokenPipeError:
+        _silence_broken_pipe()
     return 0
 
 
@@ -206,9 +225,12 @@ def restore_codex_config() -> None:
 
 def status(port: int) -> int:
     pid = _read_pid()
-    if _pid_running(pid) and _healthy(port):
-        print(f"Shim is running on http://{DEFAULT_HOST}:{port} with pid {pid}.")
-        return 0
+    if _pid_running(pid):
+        health = _health(port)
+        if health is not None:
+            model_count = health.get("models", "unknown")
+            print(f"Shim is running on http://{DEFAULT_HOST}:{port} with pid {pid} ({model_count} models).")
+            return 0
     if _pid_running(pid):
         print(f"Shim process {pid} exists but health check failed.")
         return 1
@@ -443,7 +465,7 @@ def _remove_section(text: str, section: str) -> str:
 
 
 def _override_args(settings_path: Path, port: int) -> list[str]:
-    models = FactorySettings(settings_path).load()
+    models = _load_models(settings_path)
     default_slug = default_model_slug(models)
     pairs = codex_config_overrides(CATALOG_PATH, default_slug, port)
     args: list[str] = []
@@ -455,6 +477,8 @@ def _override_args(settings_path: Path, port: int) -> list[str]:
 def _resolve_model_slug(models, requested: str | None) -> str:
     if requested is None:
         return _current_managed_model() or default_model_slug(models)
+    if requested in {"gpt-5.5", "openai-gpt-5-5"}:
+        return "gpt-5.5"
     by_slug = {model.slug: model.slug for model in models}
     by_model = {}
     for model in models:
@@ -482,11 +506,25 @@ def _current_managed_model() -> str | None:
 
 
 def _healthy(port: int) -> bool:
+    return _health(port) is not None
+
+
+def _health(port: int) -> dict | None:
     try:
         with urlopen(f"http://{DEFAULT_HOST}:{port}/health", timeout=0.5) as response:
-            return response.status == 200
+            if response.status != 200:
+                return None
+            return json.loads(response.read().decode("utf-8"))
     except Exception:
-        return False
+        return None
+
+
+def _silence_broken_pipe() -> None:
+    try:
+        sys.stdout.close()
+    except Exception:
+        pass
+    sys.stdout = open(os.devnull, "w")
 
 
 def _read_pid() -> int | None:

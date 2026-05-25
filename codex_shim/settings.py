@@ -47,6 +47,10 @@ class FactorySettings:
         self.path = Path(path).expanduser()
 
     def load(self) -> list[FactoryModel]:
+        if not self.path.exists():
+            if self.path == DEFAULT_FACTORY_SETTINGS:
+                return []
+            raise FileNotFoundError(self.path)
         data = json.loads(self.path.read_text())
         rows = data.get("customModels", [])
         model_counts: dict[str, int] = {}

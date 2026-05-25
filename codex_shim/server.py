@@ -35,11 +35,12 @@ class ShimServer:
 
     async def health(self, _request: web.Request) -> web.Response:
         models = self.settings.load()
-        return web.json_response({"ok": True, "models": len(models)})
+        return web.json_response({"ok": True, "models": len(models) + 1})
 
     async def models(self, _request: web.Request) -> web.Response:
         now = int(time.time())
-        data = [{"id": model.slug, "object": "model", "created": now, "owned_by": "factory"} for model in self.settings.load()]
+        data = [{"id": "gpt-5.5", "object": "model", "created": now, "owned_by": "chatgpt"}]
+        data.extend({"id": model.slug, "object": "model", "created": now, "owned_by": "factory"} for model in self.settings.load())
         return web.json_response({"object": "list", "data": data})
 
     async def chat_completions(self, request: web.Request) -> web.StreamResponse:
