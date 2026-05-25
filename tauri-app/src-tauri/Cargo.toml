@@ -1,0 +1,31 @@
+[package]
+name = "codex-shim-control"
+version = "0.1.0"
+description = "Desktop control panel for the codex-shim daemon."
+authors = ["codex-shim contributors"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "codex_shim_control_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["fs", "io-util", "macros", "process", "rt-multi-thread", "sync", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+anyhow = "1"
+thiserror = "1"
+directories = "5"
+which = "6"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

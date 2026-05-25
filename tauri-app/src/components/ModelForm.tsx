@@ -1,0 +1,162 @@
+import { useMemo } from "react";
+import { PROVIDERS } from "../types";
+import type { ModelRow, Provider } from "../types";
+
+interface Props {
+  value: ModelRow;
+  onChange: (next: ModelRow) => void;
+}
+
+const BASE_URL_DEFAULTS: Record<Provider, string> = {
+  openai: "https://api.openai.com/v1",
+  anthropic: "https://api.anthropic.com/v1",
+  "generic-chat-completion-api": "",
+};
+
+export default function ModelForm({ value, onChange }: Props) {
+  const headersText = useMemo(() => {
+    if (!value.extra_headers) return "";
+    try {
+      return JSON.stringify(value.extra_headers, null, 2);
+    } catch {
+      return "";
+    }
+  }, [value.extra_headers]);
+
+  const patch = (delta: Partial<ModelRow>) => onChange({ ...value, ...delta });
+
+  return (
+    <div className="form-grid">
+      <Field label="display_name" hint="picker 上显示的名字，可留空（默认用 model 名）">
+        <input
+          type="text"
+          value={value.display_name ?? ""}
+          onChange={(e) => patch({ display_name: e.target.value || null })}
+        />
+      </Field>
+
+      <Field label="model *" hint="发送给上游的真实 model id">
+        <input
+          type="text"
+          value={value.model}
+          onChange={(e) => patch({ model: e.target.value })}
+          required
+        />
+      </Field>
+
+      <Field label="provider *">
+        <select
+          value={value.provider}
+          onChange={(e) => {
+            const next = e.target.value as Provider;
+            patch({
+              provider: next,
+              base_url: value.base_url || BASE_URL_DEFAULTS[next] || value.base_url,
+            });
+          }}
+        >
+          {PROVIDERS.map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="base_url *" hint="不要带尾部 /chat/completions 之类">
+        <input
+          type="text"
+          value={value.base_url}
+          onChange={(e) => patch({ base_url: e.target.value })}
+          placeholder={BASE_URL_DEFAULTS[value.provider as Provider] || "https://..."}
+          required
+        />
+      </Field>
+
+      <Field label="api_key" hint="保存在本地 models.json，不会上传到 catalog">
+        <input
+          type="password"
+          autoComplete="off"
+          value={value.api_key ?? ""}
+          onChange={(e) => patch({ api_key: e.target.value })}
+        />
+      </Field>
+
+      <Field label="max_context_limit">
+        <input
+          type="number"
+          value={value.max_context_limit ?? ""}
+          onChange={(e) =>
+            patch({
+              max_context_limit: e.target.value === "" ? null : Number(e.target.value),
+            })
+          }
+        />
+      </Field>
+
+      <Field label="max_output_tokens">
+        <input
+          type="number"
+          value={value.max_output_tokens ?? ""}
+          onChange={(e) =>
+            patch({
+              max_output_tokens: e.target.value === "" ? null : Number(e.target.value),
+            })
+          }
+        />
+      </Field>
+
+      <Field label="text-only model">
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={!!value.no_image_support}
+            onChange={(e) => patch({ no_image_support: e.target.checked })}
+          />
+          关闭图像输入（no_image_support）
+        </label>
+      </Field>
+
+      <Field label="extra_headers (JSON)" hint='可选；例: {"Anthropic-Beta": "..."}' span={2}>
+        <textarea
+          rows={4}
+          spellCheck={false}
+          value={headersText}
+          onChange={(e) => {
+            const text = e.target.value.trim();
+            if (!text) {
+              patch({ extra_headers: null });
+              return;
+            }
+            try {
+              const parsed = JSON.parse(text);
+              if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                patch({ extra_headers: parsed });
+              }
+            } catch {
+              // ignore until valid JSON; user keeps typing
+            }
+          }}
+        />
+      </Field>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  span,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  span?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`form-field ${span === 2 ? "form-field-wide" : ""}`}>
+      <label className="form-label">{label}</label>
+      {children}
+      {hint && <div className="form-hint">{hint}</div>}
+    </div>
+  );
+}

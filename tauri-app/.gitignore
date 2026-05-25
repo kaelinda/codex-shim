@@ -1,0 +1,17 @@
+# Node
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor
+.idea
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+*.log
+
+# Tauri
+src-tauri/target
+src-tauri/Cargo.lock
+src-tauri/gen
