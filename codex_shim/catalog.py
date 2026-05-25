@@ -164,6 +164,8 @@ def _default_context(model: ShimModel) -> int:
         return 400_000
     if "gemini" in lower:
         return 1_000_000
+    if "deepseek" in lower:
+        return 200_000
     return 128_000
 
 

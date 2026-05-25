@@ -88,6 +88,32 @@ npx @tauri-apps/cli icon icons/source.png
 - 因为 Tauri v2 的 capability 系统比较新，如果你换了 Tauri 次版本，可能需要
   调整 `src-tauri/capabilities/default.json` 里的 permission 列表。
 
+## 浏览器调试模式
+
+在纯浏览器（非 Tauri webview）中运行时，会自动启用 Mock API 模式，方便前端调试：
+
+```bash
+npm run dev  # 启动 Vite dev server
+# 浏览器打开 http://127.0.0.1:1420/
+```
+
+Mock 模式下所有 Rust 命令调用会被拦截并返回模拟数据，可以在 Console 中看到
+`[MockAPI] xxx called` 的日志。
+
+## Provider 支持
+
+支持以下 provider：
+
+| provider | 说明 | 默认 base_url |
+|----------|------|---------------|
+| `openai` | OpenAI 兼容 API | `https://api.openai.com/v1` |
+| `anthropic` | Anthropic Messages API | `https://api.anthropic.com/v1` |
+| `deepseek` | DeepSeek API（兼容 OpenAI） | `https://api.deepseek.com` |
+| `generic-chat-completion-api` | 通用 OpenAI 兼容 API | （无默认） |
+
+编辑模型时，每个 provider 还提供预设模型下拉选择（如 GPT-4o、Claude Sonnet 4、
+DeepSeek V4 Pro 等）。
+
 ## 目录结构
 
 ```

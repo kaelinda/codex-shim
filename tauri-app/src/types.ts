@@ -73,5 +73,6 @@ export const PROVIDERS = [
   "openai",
   "anthropic",
   "generic-chat-completion-api",
+  "deepseek",
 ] as const;
 export type Provider = (typeof PROVIDERS)[number];
