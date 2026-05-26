@@ -5,7 +5,9 @@ daemon. It lets you start/stop the shim, edit `~/.codex-shim/models.json`,
 switch the active Codex Desktop model, and tail `shim.log` — without leaving
 the CLI behind, just on top of it.
 
-> 这个目录里的所有代码都尚未在本机执行过。请按下面的步骤自行安装依赖并构建。
+The app is intentionally a thin local control panel: it delegates daemon
+startup, catalog generation, active-model switching, and picker patching to the
+same `codex-shim` CLI that powers the terminal workflow.
 
 ---
 
@@ -15,14 +17,25 @@ the CLI behind, just on top of it.
   一键 Start / Stop / Restart / Generate / Enable / Disable；macOS 专属的
   picker patch / restore。
 - **Models**：直接读写父级仓库的 `~/.codex-shim/models.json`。支持表格 CRUD
-  （含上移/下移/复制），也提供「直接编辑 JSON」开关。写入前会校验必填字段和
-  `provider` 是否在 `openai / anthropic / generic-chat-completion-api` 中。
+  （新增、编辑、删除、上移、下移），也提供「直接编辑 JSON」开关。写入前会校验
+  必填字段和 `provider` 是否在 `openai / anthropic / deepseek /
+  generic-chat-completion-api` 中。
 - **Active model**：从 `codex-shim list` 拉取所有 slug，点击即可调用
   `codex-shim model use <slug>`，写到 `~/.codex/config.toml` 的 managed block。
 - **Logs**：tail 父级仓库的 `.codex-shim/shim.log`，可调 tail 大小（8K~512K），
   可开 2s 自动刷新。
 - **Settings**：覆盖默认 `models.json` 路径、端口、CLI 可执行文件、project root
   自动探测结果——这些会在所有命令调用里生效。
+
+## 最近的 UI / 稳定性改进
+
+- Dashboard、Models、Active、Logs、Settings 统一了卡片层级、按钮图标、状态色
+  token、focus ring、toast 和错误样式。
+- Dashboard 移动端改为单列页面与稳定的两列操作区，按钮不再因中文换行被压成竖排。
+- Models 弹窗补齐 `role="dialog"`、焦点陷阱、Esc 关闭、焦点恢复和字段 label 绑定。
+- App 入口增加 error boundary，单个 tab 渲染失败时不会拖垮整个窗口。
+- 健康检查和日志自动刷新改为自适应轮询：请求不重入，页面隐藏时暂停。
+- 浏览器 Mock API 不再向 console 输出每次调用日志，方便前端调试时只看真正的警告和错误。
 
 ## 依赖与前置条件
 
@@ -54,10 +67,14 @@ npm run tauri:build
 > 以及一些系统库（macOS：Xcode CLT；Linux：webkit2gtk-4.1, librsvg2-dev…；
 > Windows：MSVC、WebView2 Runtime）。
 
-## 图标占位
+Release 包默认写入 `src-tauri/target/release/bundle/`，例如 macOS 上会生成
+`.dmg` 和 `.app.tar.gz` 等 bundle。
+
+## 图标
 
 `src-tauri/tauri.conf.json` 引用了 `src-tauri/icons/{32x32.png, 128x128.png,
-128x128@2x.png, icon.icns, icon.ico}`，但仓库里没有附二进制图标。生成方式：
+128x128@2x.png, icon.icns, icon.ico}`。仓库已包含一组可构建图标；如果需要替换，
+用一张 1024x1024 PNG 重新生成：
 
 ```bash
 # 准备一张 1024x1024 的 PNG 放到 src-tauri/icons/source.png
@@ -83,8 +100,6 @@ npx @tauri-apps/cli icon icons/source.png
   restore-app` 会原样转发到 CLI，CLI 会自己报错。
 - App 完全是 CLI 的 UI 层，**不会在窗口里跑长连接代理**。daemon 仍然是
   `codex-shim start` 起的子进程。
-- 没有内置图标二进制；首次 `tauri:build` 会因找不到图标失败，请先按上面的步骤
-  生成。
 - 因为 Tauri v2 的 capability 系统比较新，如果你换了 Tauri 次版本，可能需要
   调整 `src-tauri/capabilities/default.json` 里的 permission 列表。
 
@@ -98,7 +113,7 @@ npm run dev  # 启动 Vite dev server
 ```
 
 Mock 模式下所有 Rust 命令调用会被拦截并返回模拟数据，可以在 Console 中看到
-`[MockAPI] xxx called` 的日志。
+Vite / React 自身的开发日志；Mock API 本身不会为每次调用刷日志。
 
 ## Provider 支持
 
@@ -127,11 +142,14 @@ tauri-app/
 │   ├── api.ts, types.ts
 │   └── components/
 │       ├── Sidebar.tsx, StatusBar.tsx
+│       ├── ErrorBoundary.tsx, Icon.tsx
 │       ├── Dashboard.tsx
 │       ├── ModelsManager.tsx, ModelForm.tsx
 │       ├── ActiveModel.tsx
 │       ├── LogViewer.tsx
 │       └── SettingsPanel.tsx
+│   └── hooks/
+│       └── useAdaptivePolling.ts
 └── src-tauri/                 # Rust 后端
     ├── Cargo.toml, build.rs, tauri.conf.json
     ├── capabilities/default.json

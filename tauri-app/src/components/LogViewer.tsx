@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import Icon from "./Icon";
+import { useAdaptivePolling } from "../hooks/useAdaptivePolling";
 
 interface Props {
   logPath: string;
@@ -33,13 +35,7 @@ export default function LogViewer({ logPath }: Props) {
     refresh();
   }, [refresh]);
 
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const id = window.setInterval(() => {
-      refresh().catch(() => {});
-    }, 2000);
-    return () => window.clearInterval(id);
-  }, [autoRefresh, refresh]);
+  useAdaptivePolling(refresh, { enabled: autoRefresh, intervalMs: 2000 });
 
   useEffect(() => {
     if (preRef.current) {
@@ -50,8 +46,8 @@ export default function LogViewer({ logPath }: Props) {
   return (
     <div className="logs">
       <div className="toolbar">
-        <span className="hint" title={logPath}>📄 {logPath}</span>
-        <button type="button" onClick={refresh}>↻ 刷新</button>
+        <span className="hint" title={logPath}><Icon name="file" /> {logPath}</span>
+        <button type="button" onClick={refresh}><Icon name="refresh" />刷新</button>
         <label className="toggle">
           <input
             type="checkbox"

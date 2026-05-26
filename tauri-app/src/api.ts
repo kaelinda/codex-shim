@@ -10,7 +10,7 @@ import type {
   ShimStatus,
 } from "./types";
 
-// Use mock API in browser for debugging
+// Use mock API in browser for debugging.
 const useMock = !isTauri();
 
 export const api = useMock ? buildMockApi() : {
@@ -79,7 +79,6 @@ function buildMockApi() {
   };
   for (const key of Object.keys(real)) {
     mock[key] = (...args: unknown[]) => {
-      console.warn(`[MockAPI] ${key} called — Tauri not available, returning mock data`);
       return mockData(key, args);
     };
   }
@@ -103,21 +102,33 @@ function mockData(key: string, args: unknown[]): unknown {
       return { settings_path: "~/.codex-shim/models.json", port: 8765, cli_override: null, project_root_override: null };
     case "updateAppSettings":
       return { settings_path: "~/.codex-shim/models.json", port: 8765, cli_override: null, project_root_override: null };
-    case "shimStatus":
+    case "status":
       return {
         cli: { command: "codex-shim", args: ["status"], status: 0, stdout: "Shim is stopped.", stderr: "", ok: true },
         health: { ok: false, url: "http://127.0.0.1:8765", status: null, models: null, raw: null, error: null },
       };
-    case "shimHealth":
+    case "health":
       return { ok: false, url: "http://127.0.0.1:8765", status: null, models: null, raw: null, error: null };
-    case "shimListModels":
+    case "listModels":
       return { command: "codex-shim", args: ["list"], status: 1, stdout: "", stderr: "No models available.", ok: false };
     case "readCodexAuth":
       return { auth_path: "~/.codex/auth.json", exists: false, passthrough_available: false, account_id: null, email: null, plan: null };
     case "currentActiveModel":
       return null;
-    case "readModelsFile":
-      return { models: [{ model: "MiniMax-M2.7", provider: "openai", base_url: "https://api.minimax.chat", display_name: "MiniMax-M2.7", api_key: "" }] };
+    case "readModels":
+      return {
+        models: [
+          {
+            model: "MiniMax-M2.7",
+            provider: "openai",
+            base_url: "https://api.minimax.chat",
+            display_name: "MiniMax-M2.7",
+            api_key: "",
+          },
+        ],
+      };
+    case "writeModels":
+      return args[0];
     case "tailLog":
       return "[req] /v1/responses model=\"MiniMax-M2.7\" stream=true tools=0 [] input=1 ([message])\n";
     default:

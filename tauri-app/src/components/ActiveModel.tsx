@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type { AuthSnapshot, HealthSnapshot } from "../types";
+import Icon from "./Icon";
 
 interface Props {
   health: HealthSnapshot | null;
@@ -61,7 +62,7 @@ export default function ActiveModel({ activeModel, auth, health, onUseModel, fla
       </div>
 
       <div className="toolbar">
-        <button type="button" onClick={refresh} disabled={busy}>↻ 重新拉取</button>
+        <button type="button" onClick={refresh} disabled={busy}><Icon name="refresh" />重新拉取</button>
         {!auth?.passthrough_available && (
           <span className="hint hint-warn">
             未检测到 ChatGPT 登录态，gpt-5.5 passthrough 不可用。
@@ -95,7 +96,7 @@ export default function ActiveModel({ activeModel, auth, health, onUseModel, fla
                   onClick={() => onUseModel(row.slug)}
                   disabled={busy || row.slug === activeModel}
                 >
-                  {row.slug === activeModel ? "当前" : "设为默认"}
+                  {row.slug === activeModel ? "当前" : <><Icon name="check" />设为默认</>}
                 </button>
               </td>
             </tr>

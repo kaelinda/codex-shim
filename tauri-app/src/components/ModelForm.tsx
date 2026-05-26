@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import { PROVIDERS } from "../types";
 import type { ModelRow, Provider } from "../types";
 
@@ -37,6 +37,20 @@ const MODEL_PRESETS: Record<Provider, { model: string; display: string }[]> = {
 };
 
 export default function ModelForm({ value, onChange }: Props) {
+  const idPrefix = useId().replace(/:/g, "");
+  const ids = {
+    displayName: `${idPrefix}-display-name`,
+    model: `${idPrefix}-model`,
+    modelPreset: `${idPrefix}-model-preset`,
+    provider: `${idPrefix}-provider`,
+    baseUrl: `${idPrefix}-base-url`,
+    apiKey: `${idPrefix}-api-key`,
+    maxContext: `${idPrefix}-max-context`,
+    maxOutput: `${idPrefix}-max-output`,
+    noImage: `${idPrefix}-no-image`,
+    extraHeaders: `${idPrefix}-extra-headers`,
+  };
+
   const headersText = useMemo(() => {
     if (!value.extra_headers) return "";
     try {
@@ -52,17 +66,20 @@ export default function ModelForm({ value, onChange }: Props) {
 
   return (
     <div className="form-grid">
-      <Field label="display_name" hint="picker 上显示的名字，可留空（默认用 model 名）">
+      <Field id={ids.displayName} label="display_name" hint="picker 上显示的名字，可留空（默认用 model 名）">
         <input
+          id={ids.displayName}
           type="text"
           value={value.display_name ?? ""}
           onChange={(e) => patch({ display_name: e.target.value || null })}
+          aria-describedby={`${ids.displayName}-hint`}
         />
       </Field>
 
-      <Field label="model *">
-        <div style={{ display: "flex", gap: "8px" }}>
+      <Field id={ids.model} label="model *">
+        <div className="inline-control">
           <input
+            id={ids.model}
             type="text"
             value={value.model}
             onChange={(e) => patch({ model: e.target.value })}
@@ -71,6 +88,8 @@ export default function ModelForm({ value, onChange }: Props) {
           />
           {presets.length > 0 && (
             <select
+              id={ids.modelPreset}
+              aria-label="选择模型预设"
               onChange={(e) => {
                 const preset = presets.find((p) => p.model === e.target.value);
                 if (preset) {
@@ -89,8 +108,9 @@ export default function ModelForm({ value, onChange }: Props) {
         </div>
       </Field>
 
-      <Field label="provider *">
+      <Field id={ids.provider} label="provider *">
         <select
+          id={ids.provider}
           value={value.provider}
           onChange={(e) => {
             const next = e.target.value as Provider;
@@ -106,27 +126,32 @@ export default function ModelForm({ value, onChange }: Props) {
         </select>
       </Field>
 
-      <Field label="base_url *" hint="不要带尾部 /chat/completions 之类">
+      <Field id={ids.baseUrl} label="base_url *" hint="不要带尾部 /chat/completions 之类">
         <input
+          id={ids.baseUrl}
           type="text"
           value={value.base_url}
           onChange={(e) => patch({ base_url: e.target.value })}
           placeholder={BASE_URL_DEFAULTS[value.provider as Provider] || "https://..."}
           required
+          aria-describedby={`${ids.baseUrl}-hint`}
         />
       </Field>
 
-      <Field label="api_key" hint="保存在本地 models.json，不会上传到 catalog">
+      <Field id={ids.apiKey} label="api_key" hint="保存在本地 models.json，不会上传到 catalog">
         <input
+          id={ids.apiKey}
           type="password"
           autoComplete="off"
           value={value.api_key ?? ""}
           onChange={(e) => patch({ api_key: e.target.value })}
+          aria-describedby={`${ids.apiKey}-hint`}
         />
       </Field>
 
-      <Field label="max_context_limit">
+      <Field id={ids.maxContext} label="max_context_limit">
         <input
+          id={ids.maxContext}
           type="number"
           value={value.max_context_limit ?? ""}
           onChange={(e) =>
@@ -137,8 +162,9 @@ export default function ModelForm({ value, onChange }: Props) {
         />
       </Field>
 
-      <Field label="max_output_tokens">
+      <Field id={ids.maxOutput} label="max_output_tokens">
         <input
+          id={ids.maxOutput}
           type="number"
           value={value.max_output_tokens ?? ""}
           onChange={(e) =>
@@ -149,9 +175,10 @@ export default function ModelForm({ value, onChange }: Props) {
         />
       </Field>
 
-      <Field label="text-only model">
+      <Field id={ids.noImage} label="text-only model">
         <label className="toggle">
           <input
+            id={ids.noImage}
             type="checkbox"
             checked={!!value.no_image_support}
             onChange={(e) => patch({ no_image_support: e.target.checked })}
@@ -160,11 +187,13 @@ export default function ModelForm({ value, onChange }: Props) {
         </label>
       </Field>
 
-      <Field label="extra_headers (JSON)" hint='可选；例: {"Anthropic-Beta": "..."}' span={2}>
+      <Field id={ids.extraHeaders} label="extra_headers (JSON)" hint='可选；例: {"Anthropic-Beta": "..."}' span={2}>
         <textarea
+          id={ids.extraHeaders}
           rows={4}
           spellCheck={false}
           value={headersText}
+          aria-describedby={`${ids.extraHeaders}-hint`}
           onChange={(e) => {
             const text = e.target.value.trim();
             if (!text) {
@@ -187,11 +216,13 @@ export default function ModelForm({ value, onChange }: Props) {
 }
 
 function Field({
+  id,
   label,
   hint,
   span,
   children,
 }: {
+  id: string;
   label: string;
   hint?: string;
   span?: number;
@@ -199,9 +230,9 @@ function Field({
 }) {
   return (
     <div className={`form-field ${span === 2 ? "form-field-wide" : ""}`}>
-      <label className="form-label">{label}</label>
+      <label className="form-label" htmlFor={id}>{label}</label>
       {children}
-      {hint && <div className="form-hint">{hint}</div>}
+      {hint && <div className="form-hint" id={`${id}-hint`}>{hint}</div>}
     </div>
   );
 }

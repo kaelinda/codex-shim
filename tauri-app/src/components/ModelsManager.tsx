@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { ModelRow, ModelsFile } from "../types";
+import Icon from "./Icon";
 import ModelForm from "./ModelForm";
 
 interface Props {
@@ -20,17 +21,23 @@ const EMPTY_ROW: ModelRow = {
 };
 
 export default function ModelsManager({ flash }: Props) {
+  const dialogTitleId = `${useId().replace(/:/g, "")}-model-dialog-title`;
   const [file, setFile] = useState<ModelsFile | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [draft, setDraft] = useState<ModelRow | null>(null);
   const [rawMode, setRawMode] = useState(false);
   const [rawText, setRawText] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const busyRef = useRef(busy);
+  const dialogOpen = draft !== null;
+  const models = Array.isArray(file?.models) ? file.models : [];
 
   const load = useCallback(async () => {
     setBusy(true);
     try {
-      const next = await api.readModels();
+      const next = normalizeModelsFile(await api.readModels());
       setFile(next);
       setRawText(JSON.stringify(next, null, 2));
     } catch (e) {
@@ -48,20 +55,77 @@ export default function ModelsManager({ flash }: Props) {
     if (idx === null) {
       setDraft({ ...EMPTY_ROW });
     } else if (file) {
-      setDraft({ ...EMPTY_ROW, ...file.models[idx] });
+      setDraft({ ...EMPTY_ROW, ...models[idx] });
     }
     setEditingIndex(idx);
   };
 
-  const cancelEdit = () => {
+  const cancelEdit = useCallback(() => {
     setDraft(null);
     setEditingIndex(null);
-  };
+  }, []);
+
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
+
+  useEffect(() => {
+    if (!dialogOpen) return;
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+
+    const focusableSelector = [
+      "button:not([disabled])",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "[href]",
+      "[tabindex]:not([tabindex='-1'])",
+    ].join(",");
+
+    const focusFirst = () => {
+      const first = modalRef.current?.querySelector<HTMLElement>(focusableSelector);
+      (first ?? modalRef.current)?.focus();
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (!busyRef.current) cancelEdit();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = Array.from(
+        modalRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? [],
+      ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        modalRef.current?.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.setTimeout(focusFirst, 0);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previousFocusRef.current?.focus?.();
+    };
+  }, [cancelEdit, dialogOpen]);
 
   const persist = async (next: ModelsFile) => {
     setBusy(true);
     try {
-      const saved = await api.writeModels(next);
+      const saved = normalizeModelsFile(await api.writeModels(next));
       setFile(saved);
       setRawText(JSON.stringify(saved, null, 2));
       flash("ok", "已写入 models.json");
@@ -75,7 +139,7 @@ export default function ModelsManager({ flash }: Props) {
 
   const saveDraft = async () => {
     if (!draft || !file) return;
-    const next: ModelsFile = { ...file, models: [...file.models] };
+    const next: ModelsFile = { ...file, models: [...models] };
     if (editingIndex === null) {
       next.models.push(draft);
     } else {
@@ -86,16 +150,18 @@ export default function ModelsManager({ flash }: Props) {
 
   const removeRow = async (idx: number) => {
     if (!file) return;
-    if (!window.confirm(`删除第 ${idx + 1} 行 (${file.models[idx].model})？`)) return;
-    const next: ModelsFile = { ...file, models: file.models.filter((_, i) => i !== idx) };
+    const row = models[idx];
+    if (!row) return;
+    if (!window.confirm(`删除第 ${idx + 1} 行 (${row.model})？`)) return;
+    const next: ModelsFile = { ...file, models: models.filter((_, i) => i !== idx) };
     await persist(next);
   };
 
   const moveRow = async (idx: number, dir: -1 | 1) => {
     if (!file) return;
     const j = idx + dir;
-    if (j < 0 || j >= file.models.length) return;
-    const next: ModelsFile = { ...file, models: [...file.models] };
+    if (j < 0 || j >= models.length) return;
+    const next: ModelsFile = { ...file, models: [...models] };
     [next.models[idx], next.models[j]] = [next.models[j], next.models[idx]];
     await persist(next);
   };
@@ -112,16 +178,16 @@ export default function ModelsManager({ flash }: Props) {
     }
   };
 
-  const empty = useMemo(() => file && file.models.length === 0, [file]);
+  const empty = useMemo(() => file !== null && models.length === 0, [file, models.length]);
 
   return (
     <div className="models">
       <div className="toolbar">
         <button type="button" onClick={() => startEdit(null)} disabled={busy || rawMode}>
-          ＋ 新增模型
+          <Icon name="add" />新增模型
         </button>
         <button type="button" onClick={() => load()} disabled={busy}>
-          ↻ 重新读取
+          <Icon name="refresh" />重新读取
         </button>
         <label className="toggle">
           <input
@@ -133,7 +199,7 @@ export default function ModelsManager({ flash }: Props) {
         </label>
       </div>
 
-      {!file && <div className="spinner">读取 models.json…</div>}
+      {!file && <div className="spinner" role="status">读取 models.json…</div>}
 
       {file && !rawMode && (
         <table className="models-table">
@@ -156,7 +222,7 @@ export default function ModelsManager({ flash }: Props) {
                 </td>
               </tr>
             )}
-            {file.models.map((row, idx) => (
+            {models.map((row, idx) => (
               <tr key={`${row.model}-${idx}`}>
                 <td>{idx + 1}</td>
                 <td>{row.display_name || <em className="muted">{row.model}</em>}</td>
@@ -165,10 +231,10 @@ export default function ModelsManager({ flash }: Props) {
                 <td className="truncate" title={row.base_url}>{row.base_url}</td>
                 <td>{row.api_key ? "•••" : <em className="muted">空</em>}</td>
                 <td className="row-actions">
-                  <button type="button" onClick={() => moveRow(idx, -1)} disabled={busy || idx === 0}>↑</button>
-                  <button type="button" onClick={() => moveRow(idx, 1)} disabled={busy || idx === file.models.length - 1}>↓</button>
-                  <button type="button" onClick={() => startEdit(idx)} disabled={busy}>编辑</button>
-                  <button type="button" className="danger" onClick={() => removeRow(idx)} disabled={busy}>删除</button>
+                  <button type="button" className="icon-button" onClick={() => moveRow(idx, -1)} disabled={busy || idx === 0} aria-label={`上移第 ${idx + 1} 行`}><Icon name="up" /></button>
+                  <button type="button" className="icon-button" onClick={() => moveRow(idx, 1)} disabled={busy || idx === models.length - 1} aria-label={`下移第 ${idx + 1} 行`}><Icon name="down" /></button>
+                  <button type="button" onClick={() => startEdit(idx)} disabled={busy}><Icon name="edit" />编辑</button>
+                  <button type="button" className="danger" onClick={() => removeRow(idx)} disabled={busy}><Icon name="trash" />删除</button>
                 </td>
               </tr>
             ))}
@@ -179,15 +245,16 @@ export default function ModelsManager({ flash }: Props) {
       {file && rawMode && (
         <div className="raw-edit">
           <textarea
+            aria-label="直接编辑 models.json JSON"
             value={rawText}
             onChange={(e) => setRawText(e.target.value)}
             spellCheck={false}
             rows={24}
           />
           <div className="btn-row">
-            <button type="button" onClick={saveRaw} disabled={busy}>保存 JSON</button>
+            <button type="button" onClick={saveRaw} disabled={busy}><Icon name="save" />保存 JSON</button>
             <button type="button" onClick={() => setRawText(JSON.stringify(file, null, 2))} disabled={busy}>
-              重置
+              <Icon name="reset" />重置
             </button>
           </div>
         </div>
@@ -195,15 +262,23 @@ export default function ModelsManager({ flash }: Props) {
 
       {draft && (
         <div className="modal-backdrop" onClick={cancelEdit}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">
+          <div
+            ref={modalRef}
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={dialogTitleId}
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-title" id={dialogTitleId}>
               {editingIndex === null ? "新增模型" : `编辑第 ${editingIndex + 1} 行`}
             </div>
             <ModelForm value={draft} onChange={setDraft} />
             <div className="btn-row modal-actions">
               <button type="button" onClick={cancelEdit} disabled={busy}>取消</button>
               <button type="button" className="primary" onClick={saveDraft} disabled={busy}>
-                保存
+                <Icon name="save" />保存
               </button>
             </div>
           </div>
@@ -211,4 +286,11 @@ export default function ModelsManager({ flash }: Props) {
       )}
     </div>
   );
+}
+
+function normalizeModelsFile(value: unknown): ModelsFile {
+  if (!value || typeof value !== "object") return { models: [] };
+  const maybe = value as Partial<ModelsFile>;
+  if (!Array.isArray(maybe.models)) return { ...maybe, models: [] } as ModelsFile;
+  return maybe as ModelsFile;
 }

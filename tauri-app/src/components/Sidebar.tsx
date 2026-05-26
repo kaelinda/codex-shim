@@ -1,4 +1,5 @@
 import type { AuthSnapshot, HealthSnapshot, TabKey } from "../types";
+import Icon, { type IconName } from "./Icon";
 
 interface Props {
   active: TabKey;
@@ -7,12 +8,12 @@ interface Props {
   auth: AuthSnapshot | null;
 }
 
-const TABS: { key: TabKey; label: string; icon: string; hint: string }[] = [
-  { key: "dashboard", label: "Dashboard", icon: "◎", hint: "服务总览" },
-  { key: "models", label: "Models", icon: "▤", hint: "编辑 models.json" },
-  { key: "active", label: "Active", icon: "★", hint: "切换 Codex 默认 model" },
-  { key: "logs", label: "Logs", icon: "≡", hint: "查看 shim.log" },
-  { key: "settings", label: "Settings", icon: "⚙", hint: "CLI / 端口 / 路径" },
+const TABS: { key: TabKey; label: string; icon: IconName; hint: string }[] = [
+  { key: "dashboard", label: "Dashboard", icon: "dashboard", hint: "服务总览" },
+  { key: "models", label: "Models", icon: "models", hint: "编辑 models.json" },
+  { key: "active", label: "Active", icon: "active", hint: "切换 Codex 默认 model" },
+  { key: "logs", label: "Logs", icon: "logs", hint: "查看 shim.log" },
+  { key: "settings", label: "Settings", icon: "settings", hint: "CLI / 端口 / 路径" },
 ];
 
 export default function Sidebar({ active, onSelect, health, auth }: Props) {
@@ -33,7 +34,7 @@ export default function Sidebar({ active, onSelect, health, auth }: Props) {
             className={`nav-item ${active === tab.key ? "nav-item-active" : ""}`}
             onClick={() => onSelect(tab.key)}
           >
-            <span className="nav-icon">{tab.icon}</span>
+            <span className="nav-icon"><Icon name={tab.icon} /></span>
             <span>
               <div className="nav-label">{tab.label}</div>
               <div className="nav-hint">{tab.hint}</div>

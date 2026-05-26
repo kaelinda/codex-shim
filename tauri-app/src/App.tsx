@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import Dashboard from "./components/Dashboard";
 import ModelsManager from "./components/ModelsManager";
@@ -7,6 +7,8 @@ import LogViewer from "./components/LogViewer";
 import SettingsPanel from "./components/SettingsPanel";
 import Sidebar from "./components/Sidebar";
 import StatusBar from "./components/StatusBar";
+import ErrorBoundary from "./components/ErrorBoundary";
+import { useAdaptivePolling } from "./hooks/useAdaptivePolling";
 import type {
   AppSettingsDto,
   AuthSnapshot,
@@ -32,6 +34,7 @@ export default function App() {
   const [activeModel, setActiveModel] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
 
   const refreshSettings = useCallback(async () => {
     const next = await api.appSettings();
@@ -62,16 +65,25 @@ export default function App() {
     })();
   }, [refreshAll, refreshSettings]);
 
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      refreshAll().catch(() => {});
-    }, 5000);
-    return () => window.clearInterval(id);
-  }, [refreshAll]);
+  useAdaptivePolling(refreshAll, { intervalMs: 5000 });
 
   const flash = useCallback((kind: "ok" | "err", text: string) => {
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
     setToast({ kind, text });
-    window.setTimeout(() => setToast(null), 3200);
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, 3200);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current !== null) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
   }, []);
 
   const handleAction = useCallback(
@@ -90,14 +102,14 @@ export default function App() {
   const body = useMemo(() => {
     if (bootError) {
       return (
-        <div className="error-card">
+        <div className="error-card" role="alert">
           <h2>初始化失败</h2>
           <pre>{bootError}</pre>
         </div>
       );
     }
     if (!runtime || !settings) {
-      return <div className="spinner">加载中…</div>;
+      return <div className="spinner" role="status">加载中…</div>;
     }
     switch (tab) {
       case "dashboard":
@@ -153,7 +165,7 @@ export default function App() {
       />
       <main className="main">
         <header className="topbar">
-          <h1>{TAB_TITLES[tab]}</h1>
+          <h1 id="page-title">{TAB_TITLES[tab]}</h1>
           <div className="topbar-meta">
             <span className={`pill ${health?.ok ? "pill-ok" : "pill-bad"}`}>
               {health?.ok ? `daemon ok · ${health.models ?? "?"} 个模型` : "daemon 离线"}
@@ -163,11 +175,20 @@ export default function App() {
             )}
           </div>
         </header>
-        <section className="content">{body}</section>
+        <section className="content" aria-labelledby="page-title">
+          <ErrorBoundary resetKey={tab}>{body}</ErrorBoundary>
+        </section>
       </main>
       <StatusBar runtime={runtime} settings={settings} />
       {toast && (
-        <div className={`toast toast-${toast.kind}`}>{toast.text}</div>
+        <div
+          className={`toast toast-${toast.kind}`}
+          role={toast.kind === "err" ? "alert" : "status"}
+          aria-live={toast.kind === "err" ? "assertive" : "polite"}
+          aria-atomic="true"
+        >
+          {toast.text}
+        </div>
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
+import Icon from "./Icon";
 import type {
   AppSettingsDto,
   AuthSnapshot,
@@ -96,21 +97,21 @@ export default function Dashboard({
                 onClick={wrap("Start", api.start)}
                 disabled={!!busy || daemonRunning}
               >
-                ▶ 启动
+                <Icon name="play" />启动
               </button>
               <button
                 type="button"
                 onClick={wrap("Stop", api.stop)}
                 disabled={!!busy || !daemonRunning}
               >
-                ◼ 停止
+                <Icon name="stop" />停止
               </button>
               <button
                 type="button"
                 onClick={wrap("Restart", api.restart)}
                 disabled={!!busy}
               >
-                ↻ 重启
+                <Icon name="refresh" />重启
               </button>
             </div>
           </div>
@@ -122,33 +123,38 @@ export default function Dashboard({
                 onClick={wrap("Generate catalog", api.generate)}
                 disabled={!!busy}
               >
-                ⟳ 生成 Catalog
+                <Icon name="refresh" />生成
               </button>
               <button
                 type="button"
                 onClick={wrap("Enable codex config", api.enable)}
                 disabled={!!busy}
               >
-                ✓ 启用
+                <Icon name="check" />启用
               </button>
               <button
                 type="button"
                 onClick={wrap("Disable codex config", api.disable)}
                 disabled={!!busy}
               >
-                ✗ 禁用
+                <Icon name="close" />禁用
               </button>
             </div>
           </div>
         </div>
-        {busy && <div className="busy-hint">正在执行: {busy}…</div>}
+        {busy && (
+          <div className="busy-hint" role="status" aria-live="polite">
+            正在执行: {busy}…
+          </div>
+        )}
       </Card>
 
       {/* Codex Desktop */}
       <Card title="Codex Desktop">
         <div className="launch-row">
-          <label className="row-label">项目路径</label>
+          <label className="row-label" htmlFor="dashboard-launch-path">项目路径</label>
           <input
+            id="dashboard-launch-path"
             type="text"
             value={launchPath}
             onChange={(e) => setLaunchPath(e.target.value)}
@@ -162,7 +168,7 @@ export default function Dashboard({
             )}
             disabled={!!busy}
           >
-            🚀 启动 Codex
+            <Icon name="launch" />启动 Codex
           </button>
         </div>
         {runtime.platform === "macos" && (
@@ -175,14 +181,14 @@ export default function Dashboard({
                 onClick={wrap("Patch macOS picker", api.patchApp)}
                 disabled={!!busy}
               >
-                ⚠ 应用补丁
+                <Icon name="patch" />应用
               </button>
               <button
                 type="button"
                 onClick={wrap("Restore picker", api.restoreApp)}
                 disabled={!!busy}
               >
-                ↩ 恢复原始
+                <Icon name="restore" />恢复原始
               </button>
             </div>
             <span className="hint">

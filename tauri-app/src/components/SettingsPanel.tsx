@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "../api";
 import type { AppSettingsDto, RuntimeInfo } from "../types";
+import Icon from "./Icon";
 
 interface Props {
   runtime: RuntimeInfo;
@@ -11,8 +12,15 @@ interface Props {
 }
 
 export default function SettingsPanel({ runtime, settings, onUpdated, flash }: Props) {
+  const idPrefix = useId().replace(/:/g, "");
   const [draft, setDraft] = useState<AppSettingsDto>(settings);
   const [busy, setBusy] = useState(false);
+  const ids = {
+    settingsPath: `${idPrefix}-settings-path`,
+    port: `${idPrefix}-port`,
+    cliOverride: `${idPrefix}-cli-override`,
+    projectRoot: `${idPrefix}-project-root`,
+  };
 
   const save = async () => {
     setBusy(true);
@@ -50,16 +58,18 @@ export default function SettingsPanel({ runtime, settings, onUpdated, flash }: P
   return (
     <div className="settings-panel">
       <Section title="路径与端口">
-        <Row label="models.json">
+        <Row label="models.json" htmlFor={ids.settingsPath}>
           <input
+            id={ids.settingsPath}
             type="text"
             value={draft.settings_path}
             onChange={(e) => setDraft({ ...draft, settings_path: e.target.value })}
           />
-          <button type="button" onClick={() => pickFile("settings_path")}>选择…</button>
+          <button type="button" onClick={() => pickFile("settings_path")}><Icon name="file" />选择</button>
         </Row>
-        <Row label="port">
+        <Row label="port" htmlFor={ids.port}>
           <input
+            id={ids.port}
             type="number"
             min={1}
             max={65535}
@@ -67,17 +77,19 @@ export default function SettingsPanel({ runtime, settings, onUpdated, flash }: P
             onChange={(e) => setDraft({ ...draft, port: Number(e.target.value) || 0 })}
           />
         </Row>
-        <Row label="codex-shim CLI">
+        <Row label="codex-shim CLI" htmlFor={ids.cliOverride}>
           <input
+            id={ids.cliOverride}
             type="text"
             value={draft.cli_override ?? ""}
             onChange={(e) => setDraft({ ...draft, cli_override: e.target.value || null })}
             placeholder="留空表示自动 (PATH/codex-shim or python3 -m codex_shim.cli)"
           />
-          <button type="button" onClick={() => pickFile("cli_override")}>选择…</button>
+          <button type="button" onClick={() => pickFile("cli_override")}><Icon name="file" />选择</button>
         </Row>
-        <Row label="project root">
+        <Row label="project root" htmlFor={ids.projectRoot}>
           <input
+            id={ids.projectRoot}
             type="text"
             value={draft.project_root_override ?? ""}
             onChange={(e) =>
@@ -85,18 +97,18 @@ export default function SettingsPanel({ runtime, settings, onUpdated, flash }: P
             }
             placeholder="留空时自动从 cwd 向上查找 codex_shim/ 目录"
           />
-          <button type="button" onClick={() => pickDir("project_root_override")}>选择…</button>
+          <button type="button" onClick={() => pickDir("project_root_override")}><Icon name="file" />选择</button>
         </Row>
         <div className="btn-row">
           <button type="button" className="primary" onClick={save} disabled={busy}>
-            保存
+            <Icon name="save" />保存
           </button>
           <button
             type="button"
             onClick={() => setDraft(settings)}
             disabled={busy}
           >
-            重置
+            <Icon name="reset" />重置
           </button>
         </div>
       </Section>
@@ -124,10 +136,18 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="row">
-      <label className="row-label">{label}</label>
+      <label className="row-label" htmlFor={htmlFor}>{label}</label>
       {children}
     </div>
   );
