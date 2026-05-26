@@ -25,3 +25,6 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# MCP / tool artifacts
+.playwright-mcp/

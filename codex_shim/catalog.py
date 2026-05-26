@@ -14,6 +14,10 @@ def catalog_entry(model: ShimModel) -> dict:
     compact = max(8_000, int(context * 0.8))
     truncation = min(64_000, max(8_000, int(context * 0.32)))
     reasoning = _reasoning_effort(model)
+    # Providers that return reasoning/thinking content which must be preserved
+    # across turns (DeepSeek requires reasoning_content be passed back).
+    _reasoning_providers = {"deepseek", "anthropic"}
+    _supports_reasoning = model.provider in _reasoning_providers
     return {
         "slug": model.slug,
         "display_name": model.display_name,
@@ -29,9 +33,9 @@ def catalog_entry(model: ShimModel) -> dict:
             {"effort": "high", "description": "Deeper reasoning"},
             {"effort": "xhigh", "description": "Maximum reasoning where supported"},
         ],
-        "default_reasoning_summary": "none",
-        "reasoning_summary_format": "none",
-        "supports_reasoning_summaries": False,
+        "default_reasoning_summary": "auto" if _supports_reasoning else "none",
+        "reasoning_summary_format": "experimental" if _supports_reasoning else "none",
+        "supports_reasoning_summaries": _supports_reasoning,
         "default_verbosity": "low",
         "support_verbosity": False,
         "apply_patch_tool_type": "freeform",
