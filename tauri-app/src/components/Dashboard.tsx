@@ -28,6 +28,7 @@ export default function Dashboard({
 }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [launchPath, setLaunchPath] = useState<string>(".");
+  const [showRawHealth, setShowRawHealth] = useState(false);
 
   const wrap = (label: string, fn: () => Promise<unknown>) => async () => {
     setBusy(label);
@@ -38,128 +39,242 @@ export default function Dashboard({
     }
   };
 
+  const daemonRunning = health?.ok === true;
+
   return (
     <div className="dashboard">
+      {/* Status overview */}
       <div className="card-grid">
-        <Card title="Daemon" tone={health?.ok ? "ok" : "bad"}>
-          <KV k="status" v={health?.ok ? "running" : "stopped"} />
-          <KV k="url" v={health?.url ?? `http://127.0.0.1:${settings.port}/health`} />
-          <KV k="models" v={health?.models?.toString() ?? "—"} />
-          {health?.error && <KV k="error" v={health.error} />}
-        </Card>
+        <StatusCard
+          title="Daemon"
+          statusLabel={daemonRunning ? "运行中" : "已停止"}
+          tone={daemonRunning ? "ok" : "bad"}
+        >
+          <KV k="端口" v={String(settings.port)} />
+          <KV k="模型数" v={health?.models?.toString() ?? "—"} />
+          {health?.error && <KV k="错误" v={health.error} />}
+        </StatusCard>
 
-        <Card title="Codex login" tone={auth?.passthrough_available ? "ok" : "warn"}>
-          <KV k="passthrough" v={auth?.passthrough_available ? "available" : "未登录"} />
+        <StatusCard
+          title="Codex 登录"
+          statusLabel={auth?.passthrough_available ? "已登录" : "未登录"}
+          tone={auth?.passthrough_available ? "ok" : "warn"}
+        >
+          <KV k="Passthrough" v={auth?.passthrough_available ? "可用" : "不可用"} />
           <KV k="auth.json" v={auth?.exists ? "存在" : "缺失"} />
-          {auth?.email && <KV k="email" v={auth.email} />}
-          {auth?.plan && <KV k="plan" v={auth.plan} />}
-        </Card>
+          {auth?.email && <KV k="邮箱" v={auth.email} />}
+          {auth?.plan && <KV k="订阅" v={auth.plan} />}
+        </StatusCard>
 
-        <Card title="Active model" tone={activeModel ? "ok" : "warn"}>
-          <KV k="model" v={activeModel ?? "未设置"} />
-          <KV k="config" v={runtime.codex_config_path} />
-        </Card>
+        <StatusCard
+          title="当前模型"
+          statusLabel={activeModel ?? "未设置"}
+          tone={activeModel ? "ok" : "warn"}
+        >
+          <KV k="配置文件" v={runtime.codex_config_path} />
+        </StatusCard>
 
-        <Card title="Project" tone={runtime.detected_project_root ? "ok" : "warn"}>
-          <KV k="root" v={runtime.detected_project_root ?? "未检测到"} />
-          <KV k="log" v={runtime.log_path} />
-        </Card>
+        <StatusCard
+          title="项目"
+          statusLabel={runtime.detected_project_root ? "已检测" : "未检测到"}
+          tone={runtime.detected_project_root ? "ok" : "warn"}
+        >
+          <KV k="项目根目录" v={runtime.detected_project_root ?? "—"} />
+          <KV k="日志路径" v={runtime.log_path} />
+        </StatusCard>
       </div>
 
+      {/* Daemon controls */}
       <Card title="Daemon 控制">
-        <div className="btn-row">
-          <button type="button" onClick={wrap("Start", api.start)} disabled={!!busy}>
-            ▶ Start
-          </button>
-          <button type="button" onClick={wrap("Stop", api.stop)} disabled={!!busy}>
-            ◼ Stop
-          </button>
-          <button type="button" onClick={wrap("Restart", api.restart)} disabled={!!busy}>
-            ↻ Restart
-          </button>
-          <button type="button" onClick={wrap("Generate catalog", api.generate)} disabled={!!busy}>
-            ⟳ Generate
-          </button>
-          <button type="button" onClick={wrap("Enable codex config", api.enable)} disabled={!!busy}>
-            ✓ Enable
-          </button>
-          <button type="button" onClick={wrap("Disable codex config", api.disable)} disabled={!!busy}>
-            ✗ Disable
-          </button>
+        <div className="control-groups">
+          <div className="control-group">
+            <span className="control-group-label">生命周期</span>
+            <div className="btn-row">
+              <button
+                className="primary"
+                type="button"
+                onClick={wrap("Start", api.start)}
+                disabled={!!busy || daemonRunning}
+              >
+                ▶ 启动
+              </button>
+              <button
+                type="button"
+                onClick={wrap("Stop", api.stop)}
+                disabled={!!busy || !daemonRunning}
+              >
+                ◼ 停止
+              </button>
+              <button
+                type="button"
+                onClick={wrap("Restart", api.restart)}
+                disabled={!!busy}
+              >
+                ↻ 重启
+              </button>
+            </div>
+          </div>
+          <div className="control-group">
+            <span className="control-group-label">配置管理</span>
+            <div className="btn-row">
+              <button
+                type="button"
+                onClick={wrap("Generate catalog", api.generate)}
+                disabled={!!busy}
+              >
+                ⟳ 生成 Catalog
+              </button>
+              <button
+                type="button"
+                onClick={wrap("Enable codex config", api.enable)}
+                disabled={!!busy}
+              >
+                ✓ 启用
+              </button>
+              <button
+                type="button"
+                onClick={wrap("Disable codex config", api.disable)}
+                disabled={!!busy}
+              >
+                ✗ 禁用
+              </button>
+            </div>
+          </div>
         </div>
         {busy && <div className="busy-hint">正在执行: {busy}…</div>}
       </Card>
 
+      {/* Codex Desktop */}
       <Card title="Codex Desktop">
-        <div className="row">
-          <label className="row-label">project path</label>
+        <div className="launch-row">
+          <label className="row-label">项目路径</label>
           <input
             type="text"
             value={launchPath}
             onChange={(e) => setLaunchPath(e.target.value)}
-            placeholder="."
+            placeholder="输入项目路径，默认当前目录"
           />
           <button
+            className="primary"
             type="button"
-            onClick={wrap(`launch app (${launchPath})`, () => api.launchApp(launchPath))}
+            onClick={wrap(`launch app (${launchPath})`, () =>
+              api.launchApp(launchPath),
+            )}
             disabled={!!busy}
           >
-            🚀 Launch
+            🚀 启动 Codex
           </button>
         </div>
         {runtime.platform === "macos" && (
-          <div className="btn-row btn-row-tight">
-            <button type="button" onClick={wrap("Patch macOS picker", api.patchApp)} disabled={!!busy}>
-              ⚠ Patch picker
-            </button>
-            <button type="button" onClick={wrap("Restore picker", api.restoreApp)} disabled={!!busy}>
-              ↩ Restore picker
-            </button>
+          <div className="patch-section">
+            <span className="control-group-label">Picker 补丁 (macOS)</span>
+            <div className="btn-row">
+              <button
+                className="danger"
+                type="button"
+                onClick={wrap("Patch macOS picker", api.patchApp)}
+                disabled={!!busy}
+              >
+                ⚠ 应用补丁
+              </button>
+              <button
+                type="button"
+                onClick={wrap("Restore picker", api.restoreApp)}
+                disabled={!!busy}
+              >
+                ↩ 恢复原始
+              </button>
+            </div>
             <span className="hint">
-              仅 macOS。需要 npx、osascript、codesign，并会修改 /Applications/Codex.app。
+              需要 npx、osascript、codesign，会修改 /Applications/Codex.app
             </span>
           </div>
         )}
-        {runtime.platform !== "macos" && (
-          <div className="hint">picker patch 仅适用于 macOS。</div>
-        )}
       </Card>
 
+      {/* Health check */}
       <Card title="健康检查">
-        <pre className="code-block">
-          {JSON.stringify(health ?? {}, null, 2)}
-        </pre>
-        <div className="btn-row btn-row-tight">
-          <button
-            type="button"
-            onClick={async () => {
-              try {
-                const list = await api.listModels();
-                flash(list.ok ? "ok" : "err", list.stdout || list.stderr || "(empty)");
-              } catch (e) {
-                flash("err", String(e));
-              }
-            }}
-          >
-            列出全部 slug
-          </button>
-        </div>
+        {health ? (
+          <>
+            <div className="health-summary">
+              <span className={`health-dot ${daemonRunning ? "health-dot-ok" : "health-dot-bad"}`} />
+              <span className="health-url">{health.url ?? `http://127.0.0.1:${settings.port}/health`}</span>
+              <span className="health-meta">
+                {health.models ?? 0} 个模型
+              </span>
+            </div>
+            <div className="btn-row btn-row-tight">
+              <button
+                type="button"
+                onClick={() => setShowRawHealth((p) => !p)}
+              >
+                {showRawHealth ? "收起原始数据" : "查看原始数据"}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const list = await api.listModels();
+                    flash(
+                      list.ok ? "ok" : "err",
+                      list.stdout || list.stderr || "(empty)",
+                    );
+                  } catch (e) {
+                    flash("err", String(e));
+                  }
+                }}
+              >
+                列出全部 Slug
+              </button>
+            </div>
+            {showRawHealth && (
+              <pre className="code-block">
+                {JSON.stringify(health, null, 2)}
+              </pre>
+            )}
+          </>
+        ) : (
+          <div className="empty">无法获取健康检查信息</div>
+        )}
       </Card>
+    </div>
+  );
+}
+
+function StatusCard({
+  title,
+  statusLabel,
+  tone,
+  children,
+}: {
+  title: string;
+  statusLabel: string;
+  tone: "ok" | "warn" | "bad";
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`status-card status-card-${tone}`}>
+      <div className="status-card-header">
+        <span className="status-card-title">{title}</span>
+        <span className={`status-badge status-badge-${tone}`}>
+          <span className="status-dot" />
+          {statusLabel}
+        </span>
+      </div>
+      <div className="status-card-body">{children}</div>
     </div>
   );
 }
 
 function Card({
   title,
-  tone,
   children,
 }: {
   title: string;
-  tone?: "ok" | "warn" | "bad";
   children: React.ReactNode;
 }) {
   return (
-    <div className={`card card-${tone ?? "neutral"}`}>
+    <div className="card">
       <div className="card-title">{title}</div>
       <div className="card-body">{children}</div>
     </div>

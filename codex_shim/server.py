@@ -150,6 +150,7 @@ class ShimServer:
     ) -> web.StreamResponse:
         url = _join_url(route.base_url, "/chat/completions")
         headers = _openai_headers(route)
+        _log_upstream_request(body)
         async with ClientSession(timeout=self.timeout) as session:
             upstream = await session.post(url, json=body, headers=headers)
             if upstream.status >= 400:
@@ -832,6 +833,28 @@ def _log_incoming_request(endpoint: str, body: dict[str, Any]) -> None:
         )
     except Exception as exc:
         print(f"[req] failed to log: {exc}", flush=True)
+
+
+def _log_upstream_request(body: dict[str, Any]) -> None:
+    """Log the thinking setting and reasoning_content status in the upstream request."""
+    try:
+        messages = body.get("messages") or []
+        assistant_msgs = [m for m in messages if m.get("role") == "assistant"]
+        thinking = body.get("thinking")
+        reasoning_status = []
+        for i, m in enumerate(assistant_msgs):
+            has_rc = "reasoning_content" in m
+            rc_len = len(m.get("reasoning_content", "") or "")
+            has_content = bool(m.get("content"))
+            reasoning_status.append(f"  msg[{i}]: reasoning_content={'Y' if has_rc else 'N'}({rc_len}) content={'Y' if has_content else 'N'}")
+        print(
+            f"[upstream] thinking={thinking!r} assistant_msgs={len(assistant_msgs)}",
+            flush=True,
+        )
+        for s in reasoning_status:
+            print(s, flush=True)
+    except Exception as exc:
+        print(f"[upstream] failed to log: {exc}", flush=True)
 
 
 async def _sse_lines(upstream) -> Any:

@@ -358,6 +358,10 @@ def _responses_input_to_messages(value: Any) -> list[dict[str, Any]]:
                     "content": reasoning_content,
                     "reasoning_content": reasoning_content,
                 }
+                # Preserve encrypted_content so the Anthropic translator can
+                # reattach the original thinking block (including signature).
+                if encrypted:
+                    msg["encrypted_content"] = encrypted
                 messages.append(msg)
     flush_pending_assistant_tool_calls()
     return messages
