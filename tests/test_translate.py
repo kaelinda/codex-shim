@@ -43,3 +43,121 @@ def test_chat_completion_to_response_strips_think():
     out = chat_completion_to_response(payload, "slug")
     assert out["model"] == "slug"
     assert out["output"][0]["content"][0]["text"] == "Hello"
+
+
+def test_chat_completion_to_response_preserves_reasoning_content_for_tool_calls():
+    payload = {
+        "id": "chatcmpl_1",
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "reasoning_content": "Need the current date before answering.",
+                    "content": "Let me check the date.",
+                    "tool_calls": [
+                        {
+                            "id": "call_date",
+                            "type": "function",
+                            "function": {"name": "get_date", "arguments": "{}"},
+                        }
+                    ],
+                }
+            }
+        ],
+    }
+
+    out = chat_completion_to_response(payload, "deepseek-v4-pro")
+
+    assert [item["type"] for item in out["output"]] == ["reasoning", "message", "function_call"]
+    assert out["output"][0]["summary"][0]["text"] == "Need the current date before answering."
+    assert out["output"][0]["encrypted_content"].startswith("anthropic-thinking-v1:")
+
+
+def test_responses_to_chat_replays_reasoning_on_same_assistant_tool_call_message():
+    body = {
+        "model": "deepseek",
+        "input": [
+            {
+                "id": "rs_0",
+                "type": "reasoning",
+                "summary": [{"type": "summary_text", "text": "Need the current date before answering."}],
+            },
+            {
+                "id": "msg_0",
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "Let me check the date."}],
+            },
+            {
+                "id": "call_date",
+                "type": "function_call",
+                "call_id": "call_date",
+                "name": "get_date",
+                "arguments": "{}",
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call_date",
+                "output": "2026-05-26",
+            },
+        ],
+    }
+
+    out = responses_to_chat(body, "deepseek-v4-pro")
+
+    assert out["messages"] == [
+        {
+            "role": "assistant",
+            "content": "Let me check the date.",
+            "tool_calls": [
+                {
+                    "id": "call_date",
+                    "type": "function",
+                    "function": {"name": "get_date", "arguments": "{}"},
+                }
+            ],
+            "reasoning_content": "Need the current date before answering.",
+        },
+        {"role": "tool", "tool_call_id": "call_date", "content": "2026-05-26"},
+    ]
+
+
+def test_responses_to_chat_replays_reasoning_when_tool_call_has_no_message_text():
+    body = {
+        "model": "deepseek",
+        "input": [
+            {
+                "type": "reasoning",
+                "summary": [{"type": "summary_text", "text": "Need the current date before answering."}],
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_date",
+                "name": "get_date",
+                "arguments": "{}",
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call_date",
+                "output": "2026-05-26",
+            },
+        ],
+    }
+
+    out = responses_to_chat(body, "deepseek-v4-pro")
+
+    assert out["messages"] == [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_date",
+                    "type": "function",
+                    "function": {"name": "get_date", "arguments": "{}"},
+                }
+            ],
+            "reasoning_content": "Need the current date before answering.",
+        },
+        {"role": "tool", "tool_call_id": "call_date", "content": "2026-05-26"},
+    ]

@@ -71,6 +71,90 @@ async def test_responses_routes_to_openai_chat(tmp_path):
     await upstream_client.close()
 
 
+async def test_deepseek_replays_reasoning_content_on_tool_followup(tmp_path):
+    captured = {}
+
+    async def chat(request):
+        captured["body"] = await request.json()
+        return web.json_response(
+            {
+                "id": "chatcmpl_fake",
+                "choices": [{"message": {"role": "assistant", "content": "done"}}],
+            }
+        )
+
+    upstream = web.Application()
+    upstream.router.add_post("/v1/chat/completions", chat)
+    upstream_client = TestClient(TestServer(upstream))
+    await upstream_client.start_server()
+
+    settings = tmp_path / "settings.json"
+    settings.write_text(
+        json.dumps(
+            {
+                "models": [
+                    {
+                        "model": "deepseek-chat",
+                        "display_name": "DeepSeek Chat",
+                        "provider": "deepseek",
+                        "base_url": str(upstream_client.make_url("/v1")),
+                        "api_key": "secret",
+                    }
+                ]
+            }
+        )
+    )
+    shim_client = TestClient(TestServer(ShimServer(settings).app()))
+    await shim_client.start_server()
+
+    resp = await shim_client.post(
+        "/v1/responses",
+        json={
+            "model": "deepseek-chat",
+            "input": [
+                {
+                    "type": "reasoning",
+                    "summary": [{"type": "summary_text", "text": "Need the current date before answering."}],
+                },
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Let me check the date."}],
+                },
+                {
+                    "type": "function_call",
+                    "call_id": "call_date",
+                    "name": "get_date",
+                    "arguments": "{}",
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_date",
+                    "output": "2026-05-26",
+                },
+            ],
+        },
+    )
+
+    assert resp.status == 200
+    assert captured["body"]["model"] == "deepseek-chat"
+    assert captured["body"]["messages"][0] == {
+        "role": "assistant",
+        "content": "Let me check the date.",
+        "tool_calls": [
+            {
+                "id": "call_date",
+                "type": "function",
+                "function": {"name": "get_date", "arguments": "{}"},
+            }
+        ],
+        "reasoning_content": "Need the current date before answering.",
+    }
+
+    await shim_client.close()
+    await upstream_client.close()
+
+
 async def test_health_and_models_include_chatgpt_passthrough_when_auth_present(tmp_path, auth_present):
     settings = tmp_path / "settings.json"
     settings.write_text(json.dumps({"customModels": []}))
@@ -150,4 +234,3 @@ async def test_chat_routes_to_anthropic(tmp_path):
 
     await shim_client.close()
     await upstream_client.close()
-

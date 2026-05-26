@@ -10,6 +10,13 @@ THINK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
 _THINKING_MAGIC = "anthropic-thinking-v1:"
 
 
+def _encode_thinking_blob(payload: dict[str, Any]) -> str:
+    import base64
+
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return _THINKING_MAGIC + base64.urlsafe_b64encode(raw).decode("ascii")
+
+
 def _decode_thinking_blob(encoded: Any) -> dict[str, Any] | None:
     import base64
 
@@ -236,6 +243,20 @@ def chat_completion_to_response(payload: dict[str, Any], requested_model: str) -
     choice = (payload.get("choices") or [{}])[0]
     message = choice.get("message") or {}
     output: list[dict[str, Any]] = []
+    reasoning_content = message.get("reasoning_content") or message.get("reasoning")
+    if reasoning_content:
+        reasoning_text = str(reasoning_content)
+        output.append(
+            {
+                "id": "rs_0",
+                "type": "reasoning",
+                "status": "completed",
+                "summary": [{"type": "summary_text", "text": reasoning_text}],
+                "encrypted_content": _encode_thinking_blob(
+                    {"type": "thinking", "thinking": reasoning_text, "signature": ""}
+                ),
+            }
+        )
     text = strip_think(message.get("content") or "")
     if text:
         output.append(
@@ -290,7 +311,15 @@ def _responses_input_to_messages(value: Any) -> list[dict[str, Any]]:
 
     def flush_pending_assistant_tool_calls():
         if pending_tool_calls:
-            messages.append({"role": "assistant", "content": None, "tool_calls": list(pending_tool_calls)})
+            if (
+                messages
+                and messages[-1].get("role") == "assistant"
+                and not messages[-1].get("_reasoning_only")
+                and "tool_calls" not in messages[-1]
+            ):
+                messages[-1]["tool_calls"] = list(pending_tool_calls)
+            else:
+                messages.append({"role": "assistant", "content": None, "tool_calls": list(pending_tool_calls)})
             pending_tool_calls.clear()
 
     for item in value:

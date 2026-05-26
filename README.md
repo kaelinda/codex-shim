@@ -287,8 +287,8 @@ Recommended schema:
     },
     {
       "model": "deepseek-v4-pro",
-      "provider": "anthropic",
-      "base_url": "https://api.deepseek.com/anthropic",
+      "provider": "deepseek",
+      "base_url": "https://api.deepseek.com",
       "api_key": "…",
       "display_name": "DeepSeek V4 Pro",
       "no_image_support": true
@@ -311,6 +311,7 @@ Supported `provider` values:
 |---|---|
 | `openai` | OpenAI `/v1/chat/completions` |
 | `generic-chat-completion-api` | OpenAI-shaped chat completions |
+| `deepseek` | DeepSeek OpenAI-compatible `/v1/chat/completions` |
 | `anthropic` | Anthropic `/v1/messages` |
 
 Useful model fields:
@@ -450,8 +451,10 @@ Codex Desktop ── /v1/responses ──▶ codex-shim (127.0.0.1:8765)
 
 The shim translates Codex's Responses-API request into the upstream's shape
 (chat completions or Anthropic Messages) and translates the streamed reply back.
-Extended-thinking blocks from Anthropic-shaped upstreams (Claude, DeepSeek,
-GLM, etc.) round-trip through `reasoning.encrypted_content` items.
+Extended-thinking blocks from Anthropic-shaped upstreams (Claude, GLM, etc.)
+round-trip through `reasoning.encrypted_content` items. OpenAI-shaped DeepSeek
+thinking-mode responses preserve `reasoning_content` the same way so tool-call
+follow-up requests can pass it back to DeepSeek.
 
 ---
 
