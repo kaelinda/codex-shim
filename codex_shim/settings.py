@@ -59,7 +59,7 @@ class ShimModel:
 
     @property
     def is_openai_chat(self) -> bool:
-        return self.provider in {"openai", "generic-chat-completion-api", "deepseek"}
+        return self.provider in {"openai", "generic-chat-completion-api", "deepseek", "minimax", "moonshot", "dashscope", "volcengine"}
 
 
 class ModelSettings:

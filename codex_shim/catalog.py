@@ -16,7 +16,7 @@ def catalog_entry(model: ShimModel) -> dict:
     reasoning = _reasoning_effort(model)
     # Providers that return reasoning/thinking content which must be preserved
     # across turns (DeepSeek requires reasoning_content be passed back).
-    _reasoning_providers = {"deepseek", "anthropic"}
+    _reasoning_providers = {"deepseek", "anthropic", "minimax", "moonshot", "dashscope", "volcengine"}
     _supports_reasoning = model.provider in _reasoning_providers
     return {
         "slug": model.slug,
