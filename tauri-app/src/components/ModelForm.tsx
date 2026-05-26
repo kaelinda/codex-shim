@@ -11,6 +11,29 @@ const BASE_URL_DEFAULTS: Record<Provider, string> = {
   openai: "https://api.openai.com/v1",
   anthropic: "https://api.anthropic.com/v1",
   "generic-chat-completion-api": "",
+  deepseek: "https://api.deepseek.com",
+};
+
+// Popular model presets per provider
+const MODEL_PRESETS: Record<Provider, { model: string; display: string }[]> = {
+  openai: [
+    { model: "gpt-4o", display: "GPT-4o" },
+    { model: "gpt-4o-mini", display: "GPT-4o mini" },
+    { model: "o3", display: "o3" },
+    { model: "o4-mini", display: "o4-mini" },
+  ],
+  anthropic: [
+    { model: "claude-sonnet-4-20250514", display: "Claude Sonnet 4" },
+    { model: "claude-opus-4-7-20251109", display: "Claude Opus 4.7" },
+    { model: "claude-3-5-sonnet-20241022", display: "Claude 3.5 Sonnet" },
+    { model: "claude-3-5-haiku-20241022", display: "Claude 3.5 Haiku" },
+  ],
+  deepseek: [
+    { model: "deepseek-chat", display: "DeepSeek Chat" },
+    { model: "deepseek-v4-pro", display: "DeepSeek V4 Pro" },
+    { model: "deepseek-coder", display: "DeepSeek Coder" },
+  ],
+  "generic-chat-completion-api": [],
 };
 
 export default function ModelForm({ value, onChange }: Props) {
@@ -22,6 +45,8 @@ export default function ModelForm({ value, onChange }: Props) {
       return "";
     }
   }, [value.extra_headers]);
+
+  const presets = MODEL_PRESETS[value.provider as Provider] || [];
 
   const patch = (delta: Partial<ModelRow>) => onChange({ ...value, ...delta });
 
@@ -35,13 +60,33 @@ export default function ModelForm({ value, onChange }: Props) {
         />
       </Field>
 
-      <Field label="model *" hint="发送给上游的真实 model id">
-        <input
-          type="text"
-          value={value.model}
-          onChange={(e) => patch({ model: e.target.value })}
-          required
-        />
+      <Field label="model *">
+        <div style={{ display: "flex", gap: "8px" }}>
+          <input
+            type="text"
+            value={value.model}
+            onChange={(e) => patch({ model: e.target.value })}
+            required
+            style={{ flex: 1 }}
+          />
+          {presets.length > 0 && (
+            <select
+              onChange={(e) => {
+                const preset = presets.find((p) => p.model === e.target.value);
+                if (preset) {
+                  patch({ model: preset.model, display_name: preset.display });
+                }
+                e.target.value = "";
+              }}
+              style={{ width: "auto" }}
+            >
+              <option value="">选择预设…</option>
+              {presets.map((p) => (
+                <option key={p.model} value={p.model}>{p.display}</option>
+              ))}
+            </select>
+          )}
+        </div>
       </Field>
 
       <Field label="provider *">

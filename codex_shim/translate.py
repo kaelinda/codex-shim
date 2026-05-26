@@ -33,10 +33,24 @@ def responses_to_chat(body: dict[str, Any], upstream_model: str) -> dict[str, An
         messages.append({"role": "system", "content": _content_to_text(instructions)})
     # Chat-completions upstreams don't understand reasoning items; drop the
     # marker messages we emit for the Anthropic path.
+    has_reasoning_content = False
+    pending_reasoning = ""
     for m in _responses_input_to_messages(body.get("input")):
         if m.get("_reasoning_only"):
+            # Accumulate reasoning content to merge into the next assistant message.
+            if m.get("reasoning_content"):
+                pending_reasoning += m["reasoning_content"] + "\n"
+                has_reasoning_content = True
             continue
+        # If this is an assistant message and we have pending reasoning, merge it in.
+        if m.get("role") == "assistant" and pending_reasoning:
+            m["reasoning_content"] = pending_reasoning.strip()
+            pending_reasoning = ""
         messages.append(m)
+    # If there's leftover reasoning without a following assistant message,
+    # append it as an empty assistant message (DeepSeek requires it).
+    if pending_reasoning:
+        messages.append({"role": "assistant", "content": "", "reasoning_content": pending_reasoning.strip()})
 
     chat: dict[str, Any] = {
         "model": upstream_model,
@@ -48,6 +62,16 @@ def responses_to_chat(body: dict[str, Any], upstream_model: str) -> dict[str, An
     _copy_if_present(body, chat, "max_output_tokens", "max_tokens")
     _copy_if_present(body, chat, "max_tokens")
     _copy_if_present(body, chat, "parallel_tool_calls")
+    # DeepSeek expects "thinking" as a ThinkingOptions object, not a boolean.
+    # Codex sends it as boolean true. Convert or strip.
+    thinking_raw = body.get("thinking")
+    if thinking_raw is True:
+        chat["thinking"] = {"type": "enabled"}
+    elif thinking_raw:
+        chat["thinking"] = thinking_raw
+    elif has_reasoning_content:
+        # DeepSeek requires thinking to be enabled when reasoning_content is present.
+        chat["thinking"] = {"type": "enabled"}
 
     tools = _responses_tools_to_chat_tools(body.get("tools"))
     if tools:
@@ -279,7 +303,11 @@ def _responses_input_to_messages(value: Any) -> list[dict[str, Any]]:
         item_type = item.get("type")
         if item_type in {"message", None} and "role" in item:
             flush_pending_assistant_tool_calls()
-            messages.append({"role": item.get("role", "user"), "content": _content_to_text(item.get("content", ""))})
+            role = item.get("role", "user")
+            # Normalize unsupported roles: developer → system
+            if role == "developer":
+                role = "system"
+            messages.append({"role": role, "content": _content_to_text(item.get("content", ""))})
         elif item_type in {"input_text", "text"}:
             flush_pending_assistant_tool_calls()
             messages.append({"role": "user", "content": _content_to_text(item)})
@@ -306,15 +334,31 @@ def _responses_input_to_messages(value: Any) -> list[dict[str, Any]]:
             # We keep it as a marker so the Anthropic translator can reattach
             # encrypted_content as a `thinking` block on the assistant turn.
             flush_pending_assistant_tool_calls()
-            messages.append(
-                {
+            # Build reasoning_content from summary text for DeepSeek-style providers.
+            reasoning_content = ""
+            for s in item.get("summary") or []:
+                if isinstance(s, dict):
+                    reasoning_content += s.get("text", "") or ""
+                elif isinstance(s, str):
+                    reasoning_content += s
+            # Decode encrypted_content if present (base64-encoded thinking payload).
+            encrypted = item.get("encrypted_content")
+            if encrypted:
+                decoded = _decode_thinking_blob(encrypted)
+                if decoded and isinstance(decoded, dict):
+                    thinking_text = decoded.get("thinking", "")
+                    if thinking_text:
+                        reasoning_content = thinking_text
+            # For deepseek-style providers: pass reasoning_content if we have it.
+            # Otherwise skip this reasoning item entirely (no meaningful content).
+            if reasoning_content:
+                msg: dict[str, Any] = {
                     "role": "assistant",
                     "_reasoning_only": True,
-                    "encrypted_content": item.get("encrypted_content"),
-                    "summary": item.get("summary") or [],
-                    "content": None,
+                    "content": reasoning_content,
+                    "reasoning_content": reasoning_content,
                 }
-            )
+                messages.append(msg)
     flush_pending_assistant_tool_calls()
     return messages
 

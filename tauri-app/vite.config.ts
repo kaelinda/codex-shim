@@ -12,6 +12,8 @@ export default defineConfig(async () => ({
     watch: {
       ignored: ["**/src-tauri/**"],
     },
+    // Allow browser debugging with CORS
+    cors: true,
   },
   envPrefix: ["VITE_", "TAURI_"],
   build: {
