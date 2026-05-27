@@ -1,21 +1,23 @@
 # Codex Shim Control
 
-A Tauri v2 desktop GUI that wraps the [`codex-shim`](../README.md) Python
-daemon. It lets you start/stop the shim, edit `~/.codex-shim/models.json`,
+A Tauri v2 desktop GUI with an embedded Rust shim service. It lets you
+start/stop the local shim, edit `~/.codex-shim/models.json`,
 switch the active Codex Desktop model, and tail `shim.log` — without leaving
 the CLI behind, just on top of it.
 
-The app is intentionally a thin local control panel: it delegates daemon
-startup, catalog generation, active-model switching, and picker patching to the
-same `codex-shim` CLI that powers the terminal workflow.
+The app is being migrated away from the Python daemon path. Dashboard
+Start/Stop/Restart, health checks, model listing, and active-model switching now
+use the app's embedded Rust service. Catalog generation, Codex Desktop launch,
+and macOS picker patch/restore still delegate to the `codex-shim` CLI until
+their Rust replacements land.
 
 ---
 
 ## 它能做什么
 
 - **Dashboard**：daemon 状态卡片、健康检查、Codex 登录态、当前 active model；
-  一键 Start / Stop / Restart / Generate / Enable / Disable；macOS 专属的
-  picker patch / restore。
+  一键 Start / Stop / Restart；启动的是 app 内置 Rust shim 服务。Generate /
+  Enable / Disable 与 macOS picker patch / restore 暂时仍走兼容 CLI 路径。
 - **Models**：直接读写父级仓库的 `~/.codex-shim/models.json`。支持表格 CRUD
   （新增、编辑、删除、上移、下移），也提供「直接编辑 JSON」开关。写入前会校验
   必填字段和 `provider` 是否在后端支持列表中，包括 OpenAI、Anthropic、DeepSeek、
@@ -53,8 +55,9 @@ same `codex-shim` CLI that powers the terminal workflow.
 - Node.js ≥ 18 + pnpm/npm（任选其一，本项目脚本写的是 `npm`）。
 - Rust（稳定版）+ 平台对应的 Tauri 系统依赖，参考
   <https://v2.tauri.app/start/prerequisites/>。
-- Python 3.11+ 且 `codex-shim` CLI 在 PATH，或在 Settings 里手动指定 CLI 路径。
-  应用会按下面的顺序探测 CLI：
+- Python 3.11+ 仅在使用 Generate / Enable / Disable / 启动 Codex Desktop /
+  macOS picker patch 等兼容 CLI 功能时需要。内置 Rust shim 的 Start / Stop /
+  Health / Models / Active model 不依赖 Python。需要 CLI 时，应用会按下面的顺序探测：
   1. Settings 里你填的「codex-shim CLI」路径；
   2. `which codex-shim`；
   3. `python3 -m codex_shim.cli`（fallback：在仓库根目录运行）。
@@ -98,10 +101,10 @@ npx @tauri-apps/cli icon icons/source.png
 ## 与 codex-shim 仓库的关系
 
 - 默认从 `~/.codex-shim/models.json` 读写模型清单（与 CLI 完全一致）。
-- daemon log 默认取仓库根目录下的 `.codex-shim/shim.log`，App 会通过
-  `cwd` 上溯定位含 `codex_shim/` 的目录，定位失败时也可以在 Settings 里手动指定。
-- Active model 直接调用 `codex-shim model use <slug>`，不会自己写
-  `~/.codex/config.toml`——所有副作用都委托给 CLI，保持单一来源。
+- Dashboard Start 启动 app 内置 Rust HTTP 服务，监听 `127.0.0.1:<port>`，
+  提供 `/health`、`/v1/models`、`/v1/responses`、`/v1/chat/completions`。
+- Active model 直接由 app 写入 `~/.codex/config.toml` 的 managed block，
+  指向内置服务的 `/v1` endpoint。
 - ChatGPT passthrough 的状态来自直接读取 `~/.codex/auth.json`（只看
   `tokens.access_token` 是否非空），与 `chatgpt_passthrough_available` 同义。
 
@@ -109,8 +112,8 @@ npx @tauri-apps/cli icon icons/source.png
 
 - Windows 上的 macOS picker patch 按钮会被自动隐藏；其他平台 `patch-app /
   restore-app` 会原样转发到 CLI，CLI 会自己报错。
-- App 完全是 CLI 的 UI 层，**不会在窗口里跑长连接代理**。daemon 仍然是
-  `codex-shim start` 起的子进程。
+- 内置 Rust shim 当前优先覆盖 OpenAI-compatible 的非流式代理路径；
+  Anthropic、ChatGPT passthrough、完整 streaming parity 仍在迁移中。
 - 因为 Tauri v2 的 capability 系统比较新，如果你换了 Tauri 次版本，可能需要
   调整 `src-tauri/capabilities/default.json` 里的 permission 列表。
 

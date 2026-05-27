@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::config::{self, AuthSnapshot};
+use crate::embedded_shim::EmbeddedStatus;
 use crate::error::{AppError, AppResult};
 use crate::health::{self, HealthSnapshot};
 use crate::models::{self, ModelsFile};
@@ -129,10 +130,22 @@ pub struct ShimStatus {
     pub health: HealthSnapshot,
 }
 
+fn embedded_cli_output(status: EmbeddedStatus, args: &[&str], ok: bool) -> CliOutput {
+    CliOutput {
+        command: "embedded-shim".to_string(),
+        args: args.iter().map(|v| (*v).to_string()).collect(),
+        status: Some(if ok { 0 } else { 1 }),
+        stdout: status.message,
+        stderr: String::new(),
+        ok,
+    }
+}
+
 #[tauri::command]
 pub async fn shim_status(state: State<'_, AppState>) -> AppResult<ShimStatus> {
-    let cli = run_cli(&state, &["status"]).await?;
     let port = current_settings(&state).1;
+    let embedded = state.embedded_shim.status();
+    let cli = embedded_cli_output(embedded, &["status"], true);
     let health = health::probe(port).await?;
     Ok(ShimStatus { cli, health })
 }
@@ -145,17 +158,23 @@ pub async fn shim_health(state: State<'_, AppState>) -> AppResult<HealthSnapshot
 
 #[tauri::command]
 pub async fn shim_start(state: State<'_, AppState>) -> AppResult<CliOutput> {
-    run_cli(&state, &["start"]).await
+    let (settings_path, port, _, _) = current_settings(&state);
+    let status = state.embedded_shim.start(settings_path, port).await?;
+    Ok(embedded_cli_output(status, &["start"], true))
 }
 
 #[tauri::command]
 pub async fn shim_stop(state: State<'_, AppState>) -> AppResult<CliOutput> {
-    run_cli(&state, &["stop"]).await
+    let status = state.embedded_shim.stop();
+    Ok(embedded_cli_output(status, &["stop"], true))
 }
 
 #[tauri::command]
 pub async fn shim_restart(state: State<'_, AppState>) -> AppResult<CliOutput> {
-    run_cli(&state, &["restart"]).await
+    let (settings_path, port, _, _) = current_settings(&state);
+    let _ = state.embedded_shim.stop();
+    let status = state.embedded_shim.start(settings_path, port).await?;
+    Ok(embedded_cli_output(status, &["restart"], true))
 }
 
 #[tauri::command]
@@ -175,7 +194,47 @@ pub async fn shim_disable(state: State<'_, AppState>) -> AppResult<CliOutput> {
 
 #[tauri::command]
 pub async fn shim_list_models(state: State<'_, AppState>) -> AppResult<CliOutput> {
-    run_cli(&state, &["list"]).await
+    let path = current_settings(&state).0;
+    let file = models::read_file(&path).await?;
+    let mut rows: Vec<(String, String, String, String)> = Vec::new();
+    let auth = config::read_codex_auth(&codex_auth_path()).await?;
+    if auth.passthrough_available {
+        rows.push(("gpt-5.5".to_string(), "GPT-5.5".to_string(), "gpt-5.5".to_string(), "chatgpt".to_string()));
+    }
+    rows.extend(file.models.iter().enumerate().filter_map(|(idx, row)| {
+        if row.model.trim().is_empty() || row.provider.trim().is_empty() {
+            return None;
+        }
+        let display = row.display_name.clone().unwrap_or_else(|| row.model.clone());
+        let slug = models::slug_for_row(row, idx);
+        Some((slug, display, row.model.clone(), row.provider.clone()))
+    }));
+    if rows.is_empty() {
+        return Ok(CliOutput {
+            command: "embedded-shim".to_string(),
+            args: vec!["list".to_string()],
+            status: Some(1),
+            stdout: String::new(),
+            stderr: "No models available. Create ~/.codex-shim/models.json or run codex login.".to_string(),
+            ok: false,
+        });
+    }
+    let width = rows.iter().map(|row| row.0.len()).max().unwrap_or(0);
+    let stdout = rows
+        .into_iter()
+        .map(|(slug, display, model, provider)| {
+            format!("{slug:<width$}  {display}  ->  {model} ({provider})")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok(CliOutput {
+        command: "embedded-shim".to_string(),
+        args: vec!["list".to_string()],
+        status: Some(0),
+        stdout: format!("{stdout}\n"),
+        stderr: String::new(),
+        ok: true,
+    })
 }
 
 #[tauri::command]
@@ -183,7 +242,16 @@ pub async fn shim_use_model(slug: String, state: State<'_, AppState>) -> AppResu
     if slug.trim().is_empty() {
         return Err(AppError::msg("slug 不能为空"));
     }
-    run_cli(&state, &["model", "use", &slug]).await
+    let (_, port, _, _) = current_settings(&state);
+    config::install_codex_model_config(&codex_config_path(), slug.trim(), port).await?;
+    Ok(CliOutput {
+        command: "embedded-shim".to_string(),
+        args: vec!["model".to_string(), "use".to_string(), slug],
+        status: Some(0),
+        stdout: "Updated ~/.codex/config.toml managed model config.\n".to_string(),
+        stderr: String::new(),
+        ok: true,
+    })
 }
 
 #[tauri::command]

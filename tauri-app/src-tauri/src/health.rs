@@ -57,17 +57,3 @@ pub async fn probe(port: u16) -> AppResult<HealthSnapshot> {
     };
     Ok(snapshot)
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ModelListing {
-    pub raw: Value,
-}
-
-pub async fn list_models(port: u16) -> AppResult<ModelListing> {
-    let url = format!("http://{DEFAULT_HOST}:{port}/v1/models");
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(2))
-        .build()?;
-    let raw: Value = client.get(url).send().await?.json().await?;
-    Ok(ModelListing { raw })
-}

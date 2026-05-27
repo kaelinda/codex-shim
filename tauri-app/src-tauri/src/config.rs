@@ -89,6 +89,56 @@ pub async fn read_active_model(config_path: &Path) -> AppResult<Option<String>> 
     Ok(None)
 }
 
+pub async fn install_codex_model_config(config_path: &Path, model_slug: &str, port: u16) -> AppResult<()> {
+    const MANAGED_BEGIN: &str = "# >>> codex-shim managed";
+    const MANAGED_END: &str = "# <<< codex-shim managed";
+
+    let original = if config_path.exists() {
+        fs::read_to_string(config_path).await?
+    } else {
+        String::new()
+    };
+    let cleaned = remove_managed_config(&original);
+    if let Some(parent) = config_path.parent() {
+        fs::create_dir_all(parent).await?;
+    }
+    let block = format!(
+        r#"{MANAGED_BEGIN}
+model = "{model_slug}"
+model_provider = "codex_shim"
+{MANAGED_END}
+
+{MANAGED_BEGIN}
+[model_providers.codex_shim]
+name = "Codex Shim"
+base_url = "http://127.0.0.1:{port}/v1"
+wire_api = "responses"
+experimental_bearer_token = "dummy"
+request_max_retries = 3
+stream_max_retries = 3
+stream_idle_timeout_ms = 600000
+{MANAGED_END}
+"#
+    );
+    fs::write(config_path, format!("{block}\n{}", cleaned.trim_start())).await?;
+    Ok(())
+}
+
+fn remove_managed_config(text: &str) -> String {
+    const MANAGED_BEGIN: &str = "# >>> codex-shim managed";
+    const MANAGED_END: &str = "# <<< codex-shim managed";
+    let mut current = text.to_string();
+    while let Some(start) = current.find(MANAGED_BEGIN) {
+        let Some(end_rel) = current[start..].find(MANAGED_END) else {
+            current.truncate(start);
+            break;
+        };
+        let end = start + end_rel + MANAGED_END.len();
+        current.replace_range(start..end, "");
+    }
+    current
+}
+
 pub async fn tail_log(path: &Path, max_bytes: usize) -> AppResult<String> {
     if !path.exists() {
         return Ok(String::new());

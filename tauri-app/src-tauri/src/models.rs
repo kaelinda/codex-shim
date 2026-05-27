@@ -39,6 +39,34 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
+pub fn slug_for_row(row: &ModelRow, index: usize) -> String {
+    let display = row
+        .display_name
+        .as_deref()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or(&row.model);
+    let mut slug = slugify(if display.is_empty() { &row.model } else { display });
+    if slug.is_empty() {
+        slug = format!("model-{index}");
+    }
+    slug
+}
+
+fn slugify(value: &str) -> String {
+    let mut slug = String::new();
+    let mut prev_dash = false;
+    for ch in value.trim().to_lowercase().chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch);
+            prev_dash = false;
+        } else if !prev_dash {
+            slug.push('-');
+            prev_dash = true;
+        }
+    }
+    slug.trim_matches('-').to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ModelsFile {
     #[serde(default)]

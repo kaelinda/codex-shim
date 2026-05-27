@@ -1,5 +1,6 @@
 mod commands;
 mod config;
+mod embedded_shim;
 mod error;
 mod health;
 mod models;
@@ -45,6 +46,7 @@ pub mod state {
     use std::path::PathBuf;
     use std::sync::Mutex;
 
+    use crate::embedded_shim::EmbeddedShimState;
     use crate::paths::{default_settings_path, DEFAULT_PORT};
 
     pub struct AppSettings {
@@ -68,5 +70,6 @@ pub mod state {
     #[derive(Default)]
     pub struct AppState {
         pub settings: Mutex<AppSettings>,
+        pub embedded_shim: EmbeddedShimState,
     }
 }
