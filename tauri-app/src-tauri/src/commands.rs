@@ -262,14 +262,11 @@ pub async fn shim_list_models(state: State<'_, AppState>) -> AppResult<CliOutput
     if auth.passthrough_available {
         rows.push(("gpt-5.5".to_string(), "GPT-5.5".to_string(), "gpt-5.5".to_string(), "chatgpt".to_string()));
     }
-    rows.extend(file.models.iter().enumerate().filter_map(|(idx, row)| {
-        if row.model.trim().is_empty() || row.provider.trim().is_empty() {
-            return None;
-        }
-        let display = row.display_name.clone().unwrap_or_else(|| row.model.clone());
-        let slug = models::slug_for_row(row, idx);
-        Some((slug, display, row.model.clone(), row.provider.clone()))
-    }));
+    rows.extend(
+        models::model_rows(&file)
+            .into_iter()
+            .map(|model| (model.slug, model.display_name, model.model, model.provider)),
+    );
     if rows.is_empty() {
         return Ok(CliOutput {
             command: "embedded-shim".to_string(),

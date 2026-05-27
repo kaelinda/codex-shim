@@ -50,19 +50,6 @@ pub struct ShimModel {
     pub no_image_support: bool,
 }
 
-pub fn slug_for_row(row: &ModelRow, index: usize) -> String {
-    let display = row
-        .display_name
-        .as_deref()
-        .filter(|v| !v.trim().is_empty())
-        .unwrap_or(&row.model);
-    let mut slug = slugify(if display.is_empty() { &row.model } else { display });
-    if slug.is_empty() {
-        slug = format!("model-{index}");
-    }
-    slug
-}
-
 pub fn model_rows(file: &ModelsFile) -> Vec<ShimModel> {
     let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for row in &file.models {

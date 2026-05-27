@@ -102,6 +102,7 @@ codex-shim-cli configure      # add a BYOK model/API key
 codex-shim-cli start          # start the Rust shim daemon
 codex-shim-cli enable         # start and write the managed ~/.codex/config.toml block
 codex-shim-cli list           # show model slugs
+codex-shim-cli test new-api   # test a provider/slug/model from models.json
 codex-shim-cli model use gpt-5.5
 codex-shim-cli stop
 ```
@@ -779,6 +780,7 @@ codex-shim list              list generated slugs and upstream routes
 codex-shim model list        list slugs currently usable in the picker
 codex-shim model use <slug>  set the Desktop default model in managed config
 codex-shim codex -- <args>   exec `codex` CLI through inline shim overrides
+codex-shim-cli test <name>    test a configured provider, slug, or upstream model
 codex-shim app [path]        launch Codex Desktop through managed shim config
 codex-shim patch-app         patch macOS Codex Desktop picker allowlist
 codex-shim restore-app       restore macOS app.asar from patch backup

@@ -5,6 +5,8 @@ use std::process::{Command as StdCommand, Stdio};
 use std::time::Duration;
 
 use error::{AppError, AppResult};
+use reqwest::header::{HeaderName, HeaderValue, CONTENT_TYPE};
+use serde_json::{json, Value};
 use tokio::fs::{self, OpenOptions};
 use tokio::process::Command as TokioCommand;
 use tokio::time::sleep;
@@ -56,6 +58,7 @@ async fn run() -> AppResult<()> {
         }
         CommandSpec::Status => status(parsed.port).await,
         CommandSpec::Configure => configure(&parsed.settings).await,
+        CommandSpec::Test(target) => test_model(&parsed.settings, &target).await,
         CommandSpec::Serve => serve(parsed.settings, parsed.port).await,
         CommandSpec::ModelList => list_models(&parsed.settings).await,
         CommandSpec::ModelUse(slug) => {
@@ -93,6 +96,7 @@ enum CommandSpec {
     Restart,
     Status,
     Configure,
+    Test(String),
     Serve,
     ModelList,
     ModelUse(String),
@@ -146,6 +150,12 @@ impl Args {
             Some("restart") => CommandSpec::Restart,
             Some("status") => CommandSpec::Status,
             Some("configure") => CommandSpec::Configure,
+            Some("test") => {
+                let target = raw.get(idx + 1).ok_or_else(|| {
+                    AppError::msg("usage: codex-shim-cli test <slug|provider|model>")
+                })?;
+                CommandSpec::Test(target.to_string())
+            }
             Some("serve") => CommandSpec::Serve,
             Some("model") => match raw.get(idx + 1).map(String::as_str) {
                 Some("list") => CommandSpec::ModelList,
@@ -190,6 +200,7 @@ fn print_help() {
   restart             重启守护进程\n\
   status              健康检查和模型数量\n\
   list                列出已配置模型\n\
+  test <name>         测试指定 provider、slug 或上游模型是否可用\n\
   model list          列出已配置模型\n\
   model use <slug>    在 ~/.codex/config.toml 中选择模型\n\
   codex -- <args...>  使用 shim 配置覆盖项运行 Codex CLI\n"
@@ -250,6 +261,255 @@ async fn list_models(settings_path: &Path) -> AppResult<()> {
         println!("{slug:<width$}  {display}  ->  {model} ({provider})");
     }
     Ok(())
+}
+
+async fn test_model(settings_path: &Path, target: &str) -> AppResult<()> {
+    let file = models::read_file(settings_path).await?;
+    let routes = resolve_test_targets(&test_routes(&file), target)?;
+    let total = routes.len();
+    if total > 1 {
+        println!("匹配到 {total} 个模型，开始逐条测试。");
+        println!();
+    }
+
+    let mut failures = Vec::new();
+    for route in routes {
+        if total > 1 {
+            println!("== {} ==", route.slug);
+        }
+        if let Err(err) = test_one_model(&route).await {
+            failures.push(format!("{}: {err}", route.slug));
+        }
+        if total > 1 {
+            println!();
+        }
+    }
+
+    if failures.is_empty() {
+        if total > 1 {
+            println!("全部测试通过。");
+        }
+        return Ok(());
+    }
+    Err(AppError::msg(format!(
+        "{} 个测试失败：\n{}",
+        failures.len(),
+        failures.join("\n")
+    )))
+}
+
+#[derive(Debug, Clone)]
+struct TestRoute {
+    slug: String,
+    model: String,
+    display_name: String,
+    provider: String,
+    base_url: String,
+    api_key: String,
+    max_output_tokens: Option<i64>,
+    extra_headers: Option<serde_json::Map<String, Value>>,
+}
+
+fn test_routes(file: &models::ModelsFile) -> Vec<TestRoute> {
+    let rows = models::model_rows(file);
+    rows.into_iter()
+        .filter_map(|model| {
+            let row = file.models.get(model.index)?;
+            Some(TestRoute {
+                slug: model.slug,
+                model: model.model,
+                display_name: model.display_name,
+                provider: model.provider,
+                base_url: row.base_url.trim().trim_end_matches('/').to_string(),
+                api_key: row.api_key.clone(),
+                max_output_tokens: row.max_output_tokens,
+                extra_headers: row.extra_headers.clone(),
+            })
+        })
+        .collect()
+}
+
+async fn test_one_model(route: &TestRoute) -> AppResult<()> {
+    let endpoint = if route.provider == "anthropic" {
+        "/messages"
+    } else {
+        "/chat/completions"
+    };
+    let url = join_upstream_url(&route.base_url, endpoint);
+
+    println!("正在测试上游 provider：{}", route.provider);
+    println!("  slug:  {}", route.slug);
+    println!("  model: {}", route.model);
+    println!("  url:   {url}");
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(60))
+        .build()?;
+    let mut request = client.post(&url).header(CONTENT_TYPE, "application/json");
+    let body = if route.provider == "anthropic" {
+        request = request.header("anthropic-version", "2023-06-01");
+        if !route.api_key.is_empty() {
+            request = request.header("x-api-key", &route.api_key);
+            request = request.bearer_auth(&route.api_key);
+        }
+        json!({
+            "model": route.model,
+            "max_tokens": route.max_output_tokens.filter(|value| *value > 0).unwrap_or(64).min(256),
+            "messages": [{"role": "user", "content": "ping"}],
+            "stream": false
+        })
+    } else {
+        if !route.api_key.is_empty() {
+            request = request.bearer_auth(&route.api_key);
+        }
+        json!({
+            "model": route.model,
+            "messages": [{"role": "user", "content": "ping"}],
+            "stream": false
+        })
+    };
+    request = apply_extra_headers(request, route.extra_headers.as_ref())?;
+
+    let response = request.json(&body).send().await?;
+    let status = response.status();
+    let text = response.text().await?;
+    if !status.is_success() {
+        return Err(AppError::msg(format!(
+            "测试失败：上游返回 {status}\n{}",
+            truncate_text(&text, 1200)
+        )));
+    }
+
+    println!("测试成功：上游返回 {status}");
+    if let Ok(payload) = serde_json::from_str::<Value>(&text) {
+        if let Some(preview) = response_preview(&payload, &route.provider) {
+            println!("  response: {}", truncate_text(&preview, 300));
+        }
+    }
+    Ok(())
+}
+
+fn resolve_test_targets(models: &[TestRoute], target: &str) -> AppResult<Vec<TestRoute>> {
+    let target = target.trim();
+    if target.is_empty() {
+        return Err(AppError::msg(
+            "usage: codex-shim-cli test <slug|provider|model>",
+        ));
+    }
+    if let Some(model) = models.iter().find(|model| model.slug == target) {
+        return Ok(vec![model.clone()]);
+    }
+    let provider_matches = models
+        .iter()
+        .filter(|model| model.provider == target)
+        .cloned()
+        .collect::<Vec<_>>();
+    if !provider_matches.is_empty() {
+        return Ok(provider_matches);
+    }
+    if let Some(model) = unique_match(
+        models
+            .iter()
+            .filter(|model| model.model == target)
+            .cloned()
+            .collect(),
+        target,
+        "model",
+    )? {
+        return Ok(vec![model]);
+    }
+    let lower = target.to_lowercase();
+    if let Some(model) = unique_match(
+        models
+            .iter()
+            .filter(|model| model.display_name.to_lowercase().contains(&lower))
+            .cloned()
+            .collect(),
+        target,
+        "display_name",
+    )? {
+        return Ok(vec![model]);
+    }
+    Err(AppError::msg(format!(
+        "未找到可测试的目标 {target:?}。请运行：codex-shim-cli list"
+    )))
+}
+
+fn unique_match(matches: Vec<TestRoute>, target: &str, kind: &str) -> AppResult<Option<TestRoute>> {
+    if matches.is_empty() {
+        return Ok(None);
+    }
+    if matches.len() == 1 {
+        return Ok(matches.into_iter().next());
+    }
+    let slugs = matches
+        .iter()
+        .map(|model| model.slug.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    Err(AppError::msg(format!(
+        "{kind} {target:?} 匹配到多个模型，请改用具体 slug：{slugs}"
+    )))
+}
+
+fn apply_extra_headers(
+    mut request: reqwest::RequestBuilder,
+    headers: Option<&serde_json::Map<String, Value>>,
+) -> AppResult<reqwest::RequestBuilder> {
+    for (key, value) in headers.into_iter().flatten() {
+        let rendered = value
+            .as_str()
+            .map(str::to_string)
+            .unwrap_or_else(|| value.to_string());
+        let name = HeaderName::from_bytes(key.as_bytes()).map_err(|err| {
+            AppError::msg(format!("extra_headers 中的 header 名称无效：{key}: {err}"))
+        })?;
+        let header_value = HeaderValue::from_str(&rendered).map_err(|err| {
+            AppError::msg(format!("extra_headers 中的 header 值无效：{key}: {err}"))
+        })?;
+        request = request.header(name, header_value);
+    }
+    Ok(request)
+}
+
+fn response_preview(payload: &Value, provider: &str) -> Option<String> {
+    if provider == "anthropic" {
+        return payload
+            .get("content")
+            .and_then(Value::as_array)
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("text"))
+            .and_then(Value::as_str)
+            .map(str::to_string);
+    }
+    payload
+        .get("choices")
+        .and_then(Value::as_array)
+        .and_then(|choices| choices.first())
+        .and_then(|choice| choice.get("message"))
+        .and_then(|message| message.get("content"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+fn truncate_text(value: &str, max_chars: usize) -> String {
+    if value.chars().count() <= max_chars {
+        return value.to_string();
+    }
+    let mut out = value.chars().take(max_chars).collect::<String>();
+    out.push_str("...");
+    out
+}
+
+fn join_upstream_url(base_url: &str, endpoint: &str) -> String {
+    let base = base_url.trim_end_matches('/');
+    if base.ends_with("/v1") {
+        format!("{base}{endpoint}")
+    } else if endpoint == "/messages" {
+        format!("{base}/v1/messages")
+    } else {
+        format!("{base}/v1{endpoint}")
+    }
 }
 
 async fn start_daemon(settings_path: &Path, port: u16) -> AppResult<()> {
@@ -598,7 +858,12 @@ fn prompt_provider() -> AppResult<String> {
         "4" | "moonshot" => "moonshot",
         "5" | "dashscope" => "dashscope",
         "6" | "volcengine" => "volcengine",
-        "7" | "custom" => "generic-chat-completion-api",
+        "7" | "custom" => {
+            return prompt_default(
+                "自定义 provider 名称，list 会显示这个名字",
+                "generic-chat-completion-api",
+            );
+        }
         other => other,
     };
     Ok(provider.to_string())
@@ -719,4 +984,61 @@ fn expand_tilde(value: &str) -> PathBuf {
         return paths::home_dir().join(stripped);
     }
     PathBuf::from(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_route(slug: &str, provider: &str, model: &str) -> TestRoute {
+        TestRoute {
+            slug: slug.to_string(),
+            model: model.to_string(),
+            display_name: model.to_string(),
+            provider: provider.to_string(),
+            base_url: "https://api.example.com/v1".to_string(),
+            api_key: "test-key".to_string(),
+            max_output_tokens: None,
+            extra_headers: None,
+        }
+    }
+
+    #[test]
+    fn test_target_provider_can_match_multiple_models() {
+        let models = vec![
+            test_route("model-a", "new-api", "model-a"),
+            test_route("model-b", "new-api", "model-b"),
+        ];
+
+        let matched = resolve_test_targets(&models, "new-api").unwrap();
+
+        assert_eq!(matched.len(), 2);
+        assert_eq!(matched[0].slug, "model-a");
+        assert_eq!(matched[1].slug, "model-b");
+    }
+
+    #[test]
+    fn test_target_slug_wins_over_provider_name() {
+        let models = vec![
+            test_route("new-api", "openai", "model-a"),
+            test_route("model-b", "new-api", "model-b"),
+        ];
+
+        let matched = resolve_test_targets(&models, "new-api").unwrap();
+
+        assert_eq!(matched.len(), 1);
+        assert_eq!(matched[0].slug, "new-api");
+    }
+
+    #[test]
+    fn join_upstream_url_appends_expected_endpoint() {
+        assert_eq!(
+            join_upstream_url("https://api.example.com/v1", "/chat/completions"),
+            "https://api.example.com/v1/chat/completions"
+        );
+        assert_eq!(
+            join_upstream_url("https://api.example.com", "/messages"),
+            "https://api.example.com/v1/messages"
+        );
+    }
 }
