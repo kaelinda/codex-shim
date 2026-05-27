@@ -73,7 +73,7 @@ Use this when you want the local shim and API-key setup without installing the
 desktop app or the Python package:
 
 ```bash
-git clone https://github.com/0xSero/codex-shim ~/codex-shim
+git clone https://github.com/kaelinda/codex-shim ~/codex-shim
 cd ~/codex-shim
 ./start.sh
 ```
@@ -81,11 +81,11 @@ cd ~/codex-shim
 Lazy install without keeping a checkout first:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/kaelinda/codex-shim/feature/cli/start.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/kaelinda/codex-shim/main/start.sh)"
 ```
 
 Open the script in a browser:
-https://github.com/kaelinda/codex-shim/blob/feature/cli/start.sh
+https://github.com/kaelinda/codex-shim/blob/main/start.sh
 
 `start.sh` builds the standalone Rust binary from `cli/`, installs
 `codex-shim-cli` to `~/.local/bin`, offers an interactive API-key/model setup
@@ -128,6 +128,9 @@ model, importing/exporting provider config, checking GitHub Releases for
 updates, updating the CLI helper, tailing logs, launching Codex Desktop, or
 applying the macOS picker patch.
 
+Download the latest signed release bundle:
+https://github.com/kaelinda/codex-shim/releases/latest
+
 Build it from source:
 
 ```bash
@@ -146,7 +149,7 @@ Recommended on macOS/Linux/WSL/Git Bash (installs the `codex-shim` entry
 point from `pyproject.toml`):
 
 ```bash
-git clone https://github.com/0xSero/codex-shim ~/codex-shim
+git clone https://github.com/kaelinda/codex-shim ~/codex-shim
 cd ~/codex-shim
 python3 -m pip install --user -e .
 ```
@@ -154,7 +157,7 @@ python3 -m pip install --user -e .
 Recommended on native Windows PowerShell/cmd:
 
 ```powershell
-git clone https://github.com/0xSero/codex-shim $HOME\codex-shim
+git clone https://github.com/kaelinda/codex-shim $HOME\codex-shim
 cd $HOME\codex-shim
 py -3.11 -m pip install --user -e .
 ```
@@ -173,7 +176,7 @@ Alternative on macOS/Linux/WSL/Git Bash (no install, run straight from the
 checkout):
 
 ```bash
-git clone https://github.com/0xSero/codex-shim ~/codex-shim
+git clone https://github.com/kaelinda/codex-shim ~/codex-shim
 cd ~/codex-shim
 python3 -m pip install --user aiohttp
 mkdir -p ~/.local/bin
