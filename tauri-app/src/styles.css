@@ -972,6 +972,36 @@ code {
   gap: 16px;
 }
 
+.update-banner {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  padding: 9px 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.update-banner-new {
+  border-color: var(--ok-border);
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.update-command {
+  max-height: 120px;
+}
+
+.asset-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.asset-list > button {
+  min-width: 0;
+}
+
 .models {
   display: flex;
   flex-direction: column;

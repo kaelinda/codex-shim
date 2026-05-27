@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -19,6 +20,7 @@ use crate::paths::{
     generated_config_path, log_path, DEFAULT_PORT,
 };
 use crate::state::AppState;
+use crate::updater::{self, UpdateInfo};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CliOutput {
@@ -28,6 +30,13 @@ pub struct CliOutput {
     pub stdout: String,
     pub stderr: String,
     pub ok: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigTransferResult {
+    pub path: String,
+    pub backup_path: Option<String>,
+    pub model_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +64,7 @@ pub struct RuntimeInfo {
     pub log_path: String,
     pub default_port: u16,
     pub platform: String,
+    pub app_version: String,
 }
 
 #[tauri::command]
@@ -68,6 +78,7 @@ pub async fn get_runtime_info(_state: State<'_, AppState>) -> AppResult<RuntimeI
         log_path: logp.display().to_string(),
         default_port: DEFAULT_PORT,
         platform: std::env::consts::OS.to_string(),
+        app_version: env!("CARGO_PKG_VERSION").to_string(),
     })
 }
 
@@ -404,6 +415,86 @@ pub async fn write_models_file(
 }
 
 #[tauri::command]
+pub async fn export_models_file(
+    path: String,
+    without_keys: bool,
+    state: State<'_, AppState>,
+) -> AppResult<ConfigTransferResult> {
+    let export_path = PathBuf::from(path.trim());
+    if export_path.as_os_str().is_empty() {
+        return Err(AppError::msg("导出路径不能为空"));
+    }
+    let settings_path = current_settings(&state).0;
+    let mut file = models::read_file(&settings_path).await?;
+    validate_models_file(&file)?;
+    if without_keys {
+        for row in &mut file.models {
+            row.api_key.clear();
+        }
+    }
+    models::write_file(&export_path, &file).await?;
+    Ok(ConfigTransferResult {
+        path: export_path.display().to_string(),
+        backup_path: None,
+        model_count: file.models.len(),
+    })
+}
+
+#[tauri::command]
+pub async fn import_models_file(
+    path: String,
+    state: State<'_, AppState>,
+) -> AppResult<ConfigTransferResult> {
+    let import_path = PathBuf::from(path.trim());
+    if import_path.as_os_str().is_empty() {
+        return Err(AppError::msg("导入路径不能为空"));
+    }
+    let file = models::read_file(&import_path).await?;
+    validate_models_file(&file)?;
+    if file.models.is_empty() {
+        return Err(AppError::msg("导入文件中没有任何 provider 配置。"));
+    }
+    let settings_path = current_settings(&state).0;
+    let backup_path = if settings_path.exists() {
+        let backup = backup_path_for(&settings_path)?;
+        if let Some(parent) = backup.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent).await?;
+            }
+        }
+        fs::copy(&settings_path, &backup).await?;
+        Some(backup)
+    } else {
+        None
+    };
+    models::write_file(&settings_path, &file).await?;
+    Ok(ConfigTransferResult {
+        path: settings_path.display().to_string(),
+        backup_path: backup_path.map(|path| path.display().to_string()),
+        model_count: file.models.len(),
+    })
+}
+
+fn validate_models_file(file: &ModelsFile) -> AppResult<()> {
+    for row in &file.models {
+        models::validate(row)?;
+    }
+    Ok(())
+}
+
+fn backup_path_for(path: &Path) -> AppResult<PathBuf> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|err| AppError::msg(format!("系统时间异常：{err}")))?
+        .as_secs();
+    let filename = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("models.json");
+    Ok(path.with_file_name(format!("{filename}.bak.{timestamp}")))
+}
+
+#[tauri::command]
 pub async fn tail_log(state: State<'_, AppState>, max_bytes: Option<usize>) -> AppResult<String> {
     let _ = state;
     let path = log_path();
@@ -419,6 +510,24 @@ pub async fn read_codex_auth() -> AppResult<AuthSnapshot> {
 #[tauri::command]
 pub async fn current_active_model() -> AppResult<Option<String>> {
     config::read_active_model(&codex_config_path()).await
+}
+
+#[tauri::command]
+pub async fn check_app_update() -> AppResult<UpdateInfo> {
+    updater::check_latest_release().await
+}
+
+#[tauri::command]
+pub async fn install_cli_update(ref_name: Option<String>) -> AppResult<CliOutput> {
+    let output = updater::install_cli_update(ref_name.as_deref()).await?;
+    Ok(CliOutput {
+        command: output.command,
+        args: output.args,
+        status: output.status,
+        stdout: output.stdout,
+        stderr: output.stderr,
+        ok: output.ok,
+    })
 }
 
 async fn quit_codex_app() -> AppResult<()> {

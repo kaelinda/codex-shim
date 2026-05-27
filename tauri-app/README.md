@@ -31,6 +31,16 @@ code inside the app.
 
 ## 最近的 UI / 稳定性改进
 
+- **v0.4.0 / 2026-05-27**
+  - 中文：Models 页新增 provider 配置导入、导出和脱敏导出；Settings 页新增
+    GitHub Releases 检查、App 下载入口和 CLI 更新按钮。Rust CLI 同步新增
+    `test`、`export`、`import`、`version`、`update` 命令，模型 slug 现在会保留
+    `minimax-m2.7` 这类名称中的点号。
+  - English: Models now supports provider config import, export, and redacted
+    export. Settings can check GitHub Releases, open App downloads, and update
+    the CLI helper. The Rust CLI also adds `test`, `export`, `import`,
+    `version`, and `update`, and model slugs now preserve dots such as
+    `minimax-m2.7`.
 - **v0.3.0 / 2026-05-27**
   - 中文：Tauri app 已成为独立桌面控制台，内置 Rust shim 服务；Start /
     Restart / Generate / Enable / Disable / Active model / Codex launch 不再
@@ -69,6 +79,8 @@ code inside the app.
   <https://v2.tauri.app/start/prerequisites/>。
 - 不需要 Python 或 `codex-shim` CLI。Tauri app 内置 Rust shim 服务和所需的
   catalog/config/launch/patch 命令逻辑。
+- Settings 页支持检查 GitHub Releases 更新，并可调用 `start.sh` 重新安装
+  `codex-shim-cli`。App 安装包本身仍通过 Releases 页面下载更新。
 
 ## 安装与构建
 

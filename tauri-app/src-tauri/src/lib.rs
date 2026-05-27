@@ -6,6 +6,7 @@ mod error;
 mod health;
 mod models;
 mod paths;
+mod updater;
 
 use commands::*;
 
@@ -34,9 +35,13 @@ pub fn run() {
             shim_restore_app,
             read_models_file,
             write_models_file,
+            export_models_file,
+            import_models_file,
             tail_log,
             read_codex_auth,
             current_active_model,
+            check_app_update,
+            install_cli_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

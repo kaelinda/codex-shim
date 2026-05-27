@@ -103,13 +103,20 @@ codex-shim-cli start          # start the Rust shim daemon
 codex-shim-cli enable         # start and write the managed ~/.codex/config.toml block
 codex-shim-cli list           # show model slugs
 codex-shim-cli test new-api   # test a provider/slug/model from models.json
+codex-shim-cli export ./models.json
+codex-shim-cli import ./models.json
+codex-shim-cli version
+codex-shim-cli update          # check GitHub Releases for a newer version
+codex-shim-cli update --install
 codex-shim-cli model use gpt-5.5
 codex-shim-cli stop
 ```
 
 Rust CLI runtime files live under `~/.codex-shim/cli/`. API keys stay only in
 `~/.codex-shim/models.json`; generated catalog/config files do not contain
-them.
+them. Exported provider config includes API keys by default so another device
+can use it directly; use `codex-shim-cli export --without-keys <path>` when you
+need a redacted copy.
 
 ### Standalone desktop app
 
@@ -117,8 +124,9 @@ The Tauri app is now self-contained. It embeds the Rust shim service and does
 not require Python or the `codex-shim` CLI for normal GUI use. Use it when you
 want a desktop control panel for starting/stopping the shim, editing
 `~/.codex-shim/models.json`, generating Codex config, switching the active
-model, tailing logs, launching Codex Desktop, or applying the macOS picker
-patch.
+model, importing/exporting provider config, checking GitHub Releases for
+updates, updating the CLI helper, tailing logs, launching Codex Desktop, or
+applying the macOS picker patch.
 
 Build it from source:
 
@@ -781,6 +789,12 @@ codex-shim model list        list slugs currently usable in the picker
 codex-shim model use <slug>  set the Desktop default model in managed config
 codex-shim codex -- <args>   exec `codex` CLI through inline shim overrides
 codex-shim-cli test <name>    test a configured provider, slug, or upstream model
+codex-shim-cli export <path>  export provider config, including API keys by default
+codex-shim-cli import <path>  import provider config and back up the current file
+codex-shim-cli version        print the installed CLI version
+codex-shim-cli update         check GitHub Releases for a newer version
+codex-shim-cli update --install
+                             run start.sh to reinstall the CLI from the latest release/tag
 codex-shim app [path]        launch Codex Desktop through managed shim config
 codex-shim patch-app         patch macOS Codex Desktop picker allowlist
 codex-shim restore-app       restore macOS app.asar from patch backup

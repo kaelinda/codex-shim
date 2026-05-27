@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { api } from "../api";
 import type { ModelRow, ModelsFile } from "../types";
 import Icon from "./Icon";
@@ -178,6 +179,53 @@ export default function ModelsManager({ flash }: Props) {
     }
   };
 
+  const exportConfig = async (withoutKeys: boolean) => {
+    const picked = await save({
+      defaultPath: withoutKeys ? "codex-shim-models.redacted.json" : "codex-shim-models.json",
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (!picked) return;
+    setBusy(true);
+    try {
+      const result = await api.exportModels(picked, withoutKeys);
+      flash(
+        "ok",
+        withoutKeys
+          ? `已导出脱敏配置：${result.model_count} 个模型`
+          : `已导出配置：${result.model_count} 个模型，文件包含 API Key`,
+      );
+    } catch (e) {
+      flash("err", `导出失败: ${String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importConfig = async () => {
+    const picked = await open({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (typeof picked !== "string") return;
+    if (!window.confirm("导入会覆盖当前 models.json，并自动生成备份。继续？")) return;
+    setBusy(true);
+    try {
+      const result = await api.importModels(picked);
+      await load();
+      flash(
+        "ok",
+        result.backup_path
+          ? `已导入 ${result.model_count} 个模型，已备份当前配置`
+          : `已导入 ${result.model_count} 个模型`,
+      );
+    } catch (e) {
+      flash("err", `导入失败: ${String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const empty = useMemo(() => file !== null && models.length === 0, [file, models.length]);
 
   return (
@@ -188,6 +236,15 @@ export default function ModelsManager({ flash }: Props) {
         </button>
         <button type="button" onClick={() => load()} disabled={busy}>
           <Icon name="refresh" />重新读取
+        </button>
+        <button type="button" onClick={() => exportConfig(false)} disabled={busy || !file}>
+          <Icon name="export" />导出配置
+        </button>
+        <button type="button" onClick={() => exportConfig(true)} disabled={busy || !file}>
+          <Icon name="export" />导出脱敏
+        </button>
+        <button type="button" onClick={importConfig} disabled={busy}>
+          <Icon name="import" />导入配置
         </button>
         <label className="toggle">
           <input

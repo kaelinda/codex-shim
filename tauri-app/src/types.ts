@@ -26,6 +26,12 @@ export interface CliOutput {
   ok: boolean;
 }
 
+export interface ConfigTransferResult {
+  path: string;
+  backup_path: string | null;
+  model_count: number;
+}
+
 export interface HealthSnapshot {
   ok: boolean;
   url: string;
@@ -48,6 +54,7 @@ export interface RuntimeInfo {
   log_path: string;
   default_port: number;
   platform: string;
+  app_version: string;
 }
 
 export interface AppSettingsDto {
@@ -62,6 +69,25 @@ export interface AuthSnapshot {
   account_id: string | null;
   email: string | null;
   plan: string | null;
+}
+
+export interface ReleaseAsset {
+  name: string;
+  download_url: string;
+}
+
+export interface UpdateInfo {
+  current_version: string;
+  latest_version: string;
+  latest_tag: string;
+  update_available: boolean;
+  repo: string;
+  release_url: string;
+  release_notes: string;
+  assets: ReleaseAsset[];
+  install_ref: string;
+  install_command: string;
+  checked_at: number;
 }
 
 export type TabKey = "dashboard" | "models" | "active" | "logs" | "settings";

@@ -13,6 +13,72 @@ and this project does not yet follow semantic versioning (pre-1.0).
   Python shim and Tauri app. Any provider except `anthropic` now routes through
   `/chat/completions`.
 
+## 0.4.0 — 2026-05-27
+
+### 中文
+
+#### 新增
+
+- 新增轻量 Rust CLI 安装器与 `start.sh` 懒人安装流程，可从远程下载脚本、
+  构建 `codex-shim-cli`、安装到 `~/.local/bin`，并在缺少配置时交互式引导填写
+  provider、模型和 API Key。
+- `codex-shim-cli` 新增 `test <name>`，可按 provider、slug、上游模型名或显示名
+  测试已配置 provider。
+- `codex-shim-cli` 新增 `export` / `import` 和 `config export` /
+  `config import`，支持跨设备共享 `models.json`，导入前会自动备份当前配置。
+- Tauri Models 页新增配置导入、导出和脱敏导出按钮。
+- CLI 与 Tauri Settings 页新增版本更新能力：检查 GitHub Releases、展示 App
+  下载资产，并可调用 `start.sh` 更新 `codex-shim-cli`。
+
+#### 修复
+
+- Rust CLI 与内嵌 shim 的 slug 生成现在保留模型名中的 `.`，例如
+  `minimax-m2.7` 不再变成 `minimax-m2-7`。
+- 自定义 OpenAI-compatible provider 会在 `codex-shim-cli list` 和 Tauri 模型列表中
+  保留并显示原始 provider 名称。
+
+#### 验证
+
+- `python3.11 -m compileall codex_shim -q`
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest -p pytest_asyncio.plugin tests/ -q`
+- `cargo test --manifest-path cli/Cargo.toml`
+- `cargo check --manifest-path tauri-app/src-tauri/Cargo.toml`
+- `npm run build`
+- `git diff --check`
+
+### English
+
+#### Added
+
+- Added the lightweight Rust CLI installer and `start.sh` quick-install flow.
+  It can download the script remotely, build `codex-shim-cli`, install it into
+  `~/.local/bin`, and guide first-time provider/model/API-key setup
+  interactively.
+- Added `codex-shim-cli test <name>` for checking a configured provider, slug,
+  upstream model name, or display name.
+- Added `codex-shim-cli export` / `import` plus `config export` /
+  `config import` for sharing `models.json` across devices, with automatic
+  backup before import.
+- Added import, export, and redacted export actions to the Tauri Models page.
+- Added version-update support to both the CLI and Tauri Settings page:
+  GitHub Releases checks, App download assets, and `start.sh`-based CLI update.
+
+#### Fixed
+
+- Rust CLI and embedded shim slug generation now preserves `.` in model names,
+  so `minimax-m2.7` no longer becomes `minimax-m2-7`.
+- Custom OpenAI-compatible providers are preserved and displayed by
+  `codex-shim-cli list` and the Tauri model list.
+
+#### Verified
+
+- `python3.11 -m compileall codex_shim -q`
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest -p pytest_asyncio.plugin tests/ -q`
+- `cargo test --manifest-path cli/Cargo.toml`
+- `cargo check --manifest-path tauri-app/src-tauri/Cargo.toml`
+- `npm run build`
+- `git diff --check`
+
 ## 0.3.0 — 2026-05-27
 
 ### 中文

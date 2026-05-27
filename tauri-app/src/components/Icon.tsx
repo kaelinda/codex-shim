@@ -6,7 +6,9 @@ const ICONS = {
   dashboard: "◎",
   down: "↓",
   edit: "✎",
+  export: "⇩",
   file: "▤",
+  import: "⇧",
   launch: "↗",
   logs: "≡",
   models: "▦",
@@ -20,6 +22,7 @@ const ICONS = {
   stop: "■",
   trash: "×",
   up: "↑",
+  update: "⬆",
 } as const;
 
 export type IconName = keyof typeof ICONS;

@@ -4,10 +4,12 @@ import type {
   AppSettingsDto,
   AuthSnapshot,
   CliOutput,
+  ConfigTransferResult,
   HealthSnapshot,
   ModelsFile,
   RuntimeInfo,
   ShimStatus,
+  UpdateInfo,
 } from "./types";
 
 // Use mock API in browser for debugging.
@@ -36,10 +38,17 @@ export const api = useMock ? buildMockApi() : {
   readModels: () => invoke<ModelsFile>("read_models_file"),
   writeModels: (file: ModelsFile) =>
     invoke<ModelsFile>("write_models_file", { file }),
+  exportModels: (path: string, withoutKeys = false) =>
+    invoke<ConfigTransferResult>("export_models_file", { path, withoutKeys }),
+  importModels: (path: string) =>
+    invoke<ConfigTransferResult>("import_models_file", { path }),
   tailLog: (maxBytes?: number) =>
     invoke<string>("tail_log", { maxBytes: maxBytes ?? null }),
   readCodexAuth: () => invoke<AuthSnapshot>("read_codex_auth"),
   currentActiveModel: () => invoke<string | null>("current_active_model"),
+  checkUpdate: () => invoke<UpdateInfo>("check_app_update"),
+  installCliUpdate: (refName?: string) =>
+    invoke<CliOutput>("install_cli_update", { refName: refName ?? null }),
 };
 
 function buildMockApi() {
@@ -68,10 +77,17 @@ function buildMockApi() {
     readModels: () => invoke<ModelsFile>("read_models_file"),
     writeModels: (file: ModelsFile) =>
       invoke<ModelsFile>("write_models_file", { file }),
+    exportModels: (path: string, withoutKeys = false) =>
+      invoke<ConfigTransferResult>("export_models_file", { path, withoutKeys }),
+    importModels: (path: string) =>
+      invoke<ConfigTransferResult>("import_models_file", { path }),
     tailLog: (maxBytes?: number) =>
       invoke<string>("tail_log", { maxBytes: maxBytes ?? null }),
     readCodexAuth: () => invoke<AuthSnapshot>("read_codex_auth"),
     currentActiveModel: () => invoke<string | null>("current_active_model"),
+    checkUpdate: () => invoke<UpdateInfo>("check_app_update"),
+    installCliUpdate: (refName?: string) =>
+      invoke<CliOutput>("install_cli_update", { refName: refName ?? null }),
   };
   for (const key of Object.keys(real)) {
     mock[key] = (...args: unknown[]) => {
@@ -92,6 +108,7 @@ function mockData(key: string, args: unknown[]): unknown {
         log_path: "~/.codex-shim/app/shim.log",
         default_port: 8765,
         platform: "macos",
+        app_version: "0.3.0",
       };
     case "appSettings":
       return { settings_path: "~/.codex-shim/models.json", port: 8765 };
@@ -110,6 +127,21 @@ function mockData(key: string, args: unknown[]): unknown {
       return { auth_path: "~/.codex/auth.json", exists: false, passthrough_available: false, account_id: null, email: null, plan: null };
     case "currentActiveModel":
       return null;
+    case "checkUpdate":
+      return {
+        current_version: "0.3.0",
+        latest_version: "0.4.0",
+        latest_tag: "v0.4.0",
+        update_available: true,
+        repo: "kaelinda/codex-shim",
+        release_url: "https://github.com/kaelinda/codex-shim/releases/latest",
+        release_notes: "Mock release notes",
+        assets: [],
+        install_ref: "v0.4.0",
+        install_command:
+          "CODEX_SHIM_REF=v0.4.0 bash -c \"$(curl -fsSL https://raw.githubusercontent.com/kaelinda/codex-shim/v0.4.0/start.sh)\"",
+        checked_at: Math.floor(Date.now() / 1000),
+      };
     case "readModels":
       return {
         models: [
@@ -124,6 +156,18 @@ function mockData(key: string, args: unknown[]): unknown {
       };
     case "writeModels":
       return args[0];
+    case "exportModels":
+      return {
+        path: String(args[0] ?? "models.json"),
+        backup_path: null,
+        model_count: 1,
+      };
+    case "importModels":
+      return {
+        path: "~/.codex-shim/models.json",
+        backup_path: "~/.codex-shim/models.json.bak.mock",
+        model_count: 1,
+      };
     case "tailLog":
       return "[req] /v1/responses model=\"MiniMax-M2.7\" stream=true tools=0 [] input=1 ([message])\n";
     default:

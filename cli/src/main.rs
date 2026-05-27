@@ -2,7 +2,7 @@ use std::env;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command as StdCommand, Stdio};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use error::{AppError, AppResult};
 use reqwest::header::{HeaderName, HeaderValue, CONTENT_TYPE};
@@ -18,6 +18,7 @@ mod error;
 mod health;
 mod models;
 mod paths;
+mod updater;
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -58,7 +59,16 @@ async fn run() -> AppResult<()> {
         }
         CommandSpec::Status => status(parsed.port).await,
         CommandSpec::Configure => configure(&parsed.settings).await,
+        CommandSpec::ExportConfig { path, without_keys } => {
+            export_config(&parsed.settings, &path, without_keys).await
+        }
+        CommandSpec::ImportConfig(path) => import_config(&parsed.settings, &path).await,
         CommandSpec::Test(target) => test_model(&parsed.settings, &target).await,
+        CommandSpec::Version => {
+            print_version();
+            Ok(())
+        }
+        CommandSpec::Update { install } => update_cli(install).await,
         CommandSpec::Serve => serve(parsed.settings, parsed.port).await,
         CommandSpec::ModelList => list_models(&parsed.settings).await,
         CommandSpec::ModelUse(slug) => {
@@ -96,7 +106,11 @@ enum CommandSpec {
     Restart,
     Status,
     Configure,
+    ExportConfig { path: PathBuf, without_keys: bool },
+    ImportConfig(PathBuf),
     Test(String),
+    Version,
+    Update { install: bool },
     Serve,
     ModelList,
     ModelUse(String),
@@ -150,6 +164,21 @@ impl Args {
             Some("restart") => CommandSpec::Restart,
             Some("status") => CommandSpec::Status,
             Some("configure") => CommandSpec::Configure,
+            Some("export") => parse_export_command(raw.get(idx + 1..).unwrap_or_default())?,
+            Some("import") => parse_import_command(raw.get(idx + 1..).unwrap_or_default())?,
+            Some("version") | Some("--version") | Some("-V") => CommandSpec::Version,
+            Some("update") | Some("upgrade") => {
+                parse_update_command(raw.get(idx + 1..).unwrap_or_default())?
+            }
+            Some("config") => match raw.get(idx + 1).map(String::as_str) {
+                Some("export") => parse_export_command(raw.get(idx + 2..).unwrap_or_default())?,
+                Some("import") => parse_import_command(raw.get(idx + 2..).unwrap_or_default())?,
+                _ => {
+                    return Err(AppError::msg(
+                        "usage: codex-shim-cli config export|import <path>",
+                    ));
+                }
+            },
             Some("test") => {
                 let target = raw.get(idx + 1).ok_or_else(|| {
                     AppError::msg("usage: codex-shim-cli test <slug|provider|model>")
@@ -185,6 +214,60 @@ impl Args {
     }
 }
 
+fn parse_export_command(args: &[String]) -> AppResult<CommandSpec> {
+    let mut without_keys = false;
+    let mut path: Option<PathBuf> = None;
+    let mut idx = 0;
+    while idx < args.len() {
+        match args[idx].as_str() {
+            "--without-keys" => without_keys = true,
+            "--with-keys" => without_keys = false,
+            "-h" | "--help" => {
+                return Err(AppError::msg(
+                    "usage: codex-shim-cli export [--without-keys] <path>",
+                ));
+            }
+            value if value.starts_with('-') => {
+                return Err(AppError::msg(format!("unknown export option: {value}")));
+            }
+            value => {
+                if path.is_some() {
+                    return Err(AppError::msg(
+                        "usage: codex-shim-cli export [--without-keys] <path>",
+                    ));
+                }
+                path = Some(expand_tilde(value));
+            }
+        }
+        idx += 1;
+    }
+    let path =
+        path.ok_or_else(|| AppError::msg("usage: codex-shim-cli export [--without-keys] <path>"))?;
+    Ok(CommandSpec::ExportConfig { path, without_keys })
+}
+
+fn parse_import_command(args: &[String]) -> AppResult<CommandSpec> {
+    if args.len() != 1 {
+        return Err(AppError::msg("usage: codex-shim-cli import <path>"));
+    }
+    Ok(CommandSpec::ImportConfig(expand_tilde(&args[0])))
+}
+
+fn parse_update_command(args: &[String]) -> AppResult<CommandSpec> {
+    let mut install = false;
+    for arg in args {
+        match arg.as_str() {
+            "--install" | "-i" => install = true,
+            "--check" => install = false,
+            "-h" | "--help" => {
+                return Err(AppError::msg("usage: codex-shim-cli update [--install]"));
+            }
+            value => return Err(AppError::msg(format!("unknown update option: {value}"))),
+        }
+    }
+    Ok(CommandSpec::Update { install })
+}
+
 fn print_help() {
     println!(
         "codex-shim-cli\n\n\
@@ -200,7 +283,13 @@ fn print_help() {
   restart             重启守护进程\n\
   status              健康检查和模型数量\n\
   list                列出已配置模型\n\
+  export <path>       导出 models.json，便于复制到其他设备\n\
+  import <path>       导入 models.json，并自动备份当前配置\n\
+  config export <path>  同 export <path>\n\
+  config import <path>  同 import <path>\n\
   test <name>         测试指定 provider、slug 或上游模型是否可用\n\
+  version             显示当前 CLI 版本\n\
+  update [--install]  检查 GitHub Releases 更新，--install 会重新安装 CLI\n\
   model list          列出已配置模型\n\
   model use <slug>    在 ~/.codex/config.toml 中选择模型\n\
   codex -- <args...>  使用 shim 配置覆盖项运行 Codex CLI\n"
@@ -263,6 +352,78 @@ async fn list_models(settings_path: &Path) -> AppResult<()> {
     Ok(())
 }
 
+async fn export_config(
+    settings_path: &Path,
+    export_path: &Path,
+    without_keys: bool,
+) -> AppResult<()> {
+    let mut file = models::read_file(settings_path).await?;
+    validate_models_file(&file)?;
+    if without_keys {
+        for row in &mut file.models {
+            row.api_key.clear();
+        }
+    }
+    if let Some(parent) = export_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).await?;
+        }
+    }
+    models::write_file(export_path, &file).await?;
+    println!("已导出 provider 配置到：{}", export_path.display());
+    if without_keys {
+        println!("导出文件已移除 API Key。导入到新设备后需要重新填写 api_key。");
+    } else {
+        println!("注意：导出文件包含 API Key，请只保存在可信位置。");
+    }
+    println!("模型数量：{}", file.models.len());
+    Ok(())
+}
+
+async fn import_config(settings_path: &Path, import_path: &Path) -> AppResult<()> {
+    let file = models::read_file(import_path).await?;
+    validate_models_file(&file)?;
+    if file.models.is_empty() {
+        return Err(AppError::msg("导入文件中没有任何 provider 配置。"));
+    }
+
+    if settings_path.exists() {
+        let backup_path = backup_path_for(settings_path)?;
+        if let Some(parent) = backup_path.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent).await?;
+            }
+        }
+        fs::copy(settings_path, &backup_path).await?;
+        println!("已备份当前配置到：{}", backup_path.display());
+    }
+
+    models::write_file(settings_path, &file).await?;
+    println!("已导入 provider 配置到：{}", settings_path.display());
+    println!("模型数量：{}", file.models.len());
+    println!("可运行 `codex-shim-cli list` 查看，或 `codex-shim-cli test <provider>` 测试。");
+    Ok(())
+}
+
+fn validate_models_file(file: &models::ModelsFile) -> AppResult<()> {
+    for row in &file.models {
+        models::validate(row)?;
+    }
+    Ok(())
+}
+
+fn backup_path_for(path: &Path) -> AppResult<PathBuf> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|err| AppError::msg(format!("系统时间异常：{err}")))?
+        .as_secs();
+    let filename = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("models.json");
+    Ok(path.with_file_name(format!("{filename}.bak.{timestamp}")))
+}
+
 async fn test_model(settings_path: &Path, target: &str) -> AppResult<()> {
     let file = models::read_file(settings_path).await?;
     let routes = resolve_test_targets(&test_routes(&file), target)?;
@@ -295,6 +456,74 @@ async fn test_model(settings_path: &Path, target: &str) -> AppResult<()> {
         "{} 个测试失败：\n{}",
         failures.len(),
         failures.join("\n")
+    )))
+}
+
+fn print_version() {
+    println!("codex-shim-cli {}", env!("CARGO_PKG_VERSION"));
+}
+
+async fn update_cli(install: bool) -> AppResult<()> {
+    let info = match updater::check_latest_release().await {
+        Ok(info) => info,
+        Err(err) if install => {
+            eprintln!("检查 GitHub Releases 失败：{err}");
+            eprintln!(
+                "继续使用默认分支 {} 运行安装器。",
+                updater::default_update_ref()
+            );
+            updater::fallback_update_info(None)
+        }
+        Err(err) => return Err(err),
+    };
+
+    println!("当前版本：{}", info.current_version);
+    if info.latest_version.is_empty() {
+        println!("最新版本：无法从 GitHub Releases 获取");
+    } else {
+        println!("最新版本：{} ({})", info.latest_version, info.latest_tag);
+    }
+    println!("发布页：{}", info.release_url);
+
+    if info.update_available {
+        println!("发现新版本。");
+    } else if !info.latest_version.is_empty() {
+        println!("当前已是最新版本。");
+    }
+
+    if !info.assets.is_empty() {
+        println!("可下载文件：");
+        for asset in &info.assets {
+            println!("  - {}: {}", asset.name, asset.download_url);
+        }
+    }
+
+    println!("安装命令：");
+    println!("  {}", info.install_command);
+
+    if !install {
+        println!("如需立即更新 CLI，请运行：codex-shim-cli update --install");
+        return Ok(());
+    }
+
+    println!("开始更新 CLI...");
+    let output = updater::install_cli_update(Some(&info.install_ref)).await?;
+    if !output.stdout.trim().is_empty() {
+        println!("{}", output.stdout.trim_end());
+    }
+    if !output.stderr.trim().is_empty() {
+        eprintln!("{}", output.stderr.trim_end());
+    }
+    if output.ok {
+        println!("CLI 更新完成。");
+        return Ok(());
+    }
+    Err(AppError::msg(format!(
+        "CLI 更新失败，退出状态：{}",
+        output
+            .status
+            .map(|status| status.to_string())
+            .unwrap_or_else(|| "-".to_string())
     )))
 }
 
@@ -1040,5 +1269,43 @@ mod tests {
             join_upstream_url("https://api.example.com", "/messages"),
             "https://api.example.com/v1/messages"
         );
+    }
+
+    #[test]
+    fn parse_export_accepts_redacted_flag() {
+        let args = vec!["--without-keys".to_string(), "/tmp/models.json".to_string()];
+
+        let command = parse_export_command(&args).unwrap();
+
+        match command {
+            CommandSpec::ExportConfig { path, without_keys } => {
+                assert_eq!(path, PathBuf::from("/tmp/models.json"));
+                assert!(without_keys);
+            }
+            other => panic!("unexpected command: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_import_requires_one_path() {
+        let args = vec!["/tmp/models.json".to_string()];
+
+        let command = parse_import_command(&args).unwrap();
+
+        match command {
+            CommandSpec::ImportConfig(path) => assert_eq!(path, PathBuf::from("/tmp/models.json")),
+            other => panic!("unexpected command: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn backup_path_keeps_original_filename() {
+        let backup = backup_path_for(Path::new("/tmp/models.json")).unwrap();
+
+        assert!(backup
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap()
+            .starts_with("models.json.bak."));
     }
 }

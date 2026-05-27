@@ -1968,7 +1968,7 @@ fn slugify(value: &str) -> String {
     let mut slug = String::new();
     let mut prev_dash = false;
     for ch in value.trim().to_lowercase().chars() {
-        if ch.is_ascii_alphanumeric() {
+        if ch.is_ascii_alphanumeric() || ch == '.' {
             slug.push(ch);
             prev_dash = false;
         } else if !prev_dash {
@@ -2065,6 +2065,12 @@ mod tests {
         );
         assert!(out.get("thinking").is_none());
         assert_eq!(out["model"], Value::String("gpt-4.1".to_string()));
+    }
+
+    #[test]
+    fn slugify_preserves_dots_in_model_slugs() {
+        assert_eq!(slugify("minimax-m2.7"), "minimax-m2.7");
+        assert_eq!(slugify("mimo-v2.5-pro"), "mimo-v2.5-pro");
     }
 
     #[test]
