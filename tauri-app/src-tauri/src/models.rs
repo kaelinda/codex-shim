@@ -39,6 +39,17 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
+#[derive(Debug, Clone)]
+pub struct ShimModel {
+    pub slug: String,
+    pub model: String,
+    pub display_name: String,
+    pub provider: String,
+    pub index: usize,
+    pub max_context_limit: Option<i64>,
+    pub no_image_support: bool,
+}
+
 pub fn slug_for_row(row: &ModelRow, index: usize) -> String {
     let display = row
         .display_name
@@ -50,6 +61,81 @@ pub fn slug_for_row(row: &ModelRow, index: usize) -> String {
         slug = format!("model-{index}");
     }
     slug
+}
+
+pub fn model_rows(file: &ModelsFile) -> Vec<ShimModel> {
+    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for row in &file.models {
+        let model = row.model.trim();
+        if !model.is_empty() {
+            *counts.entry(model.to_string()).or_default() += 1;
+        }
+    }
+
+    let mut used = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for (fallback_index, row) in file.models.iter().enumerate() {
+        let model = row.model.trim();
+        let provider = row.provider.trim();
+        if model.is_empty() || provider.is_empty() || row.base_url.trim().is_empty() {
+            continue;
+        }
+        let index = row
+            .extra
+            .get("index")
+            .and_then(Value::as_u64)
+            .map(|v| v as usize)
+            .unwrap_or(fallback_index);
+        let display_name = row
+            .display_name
+            .as_deref()
+            .filter(|v| !v.trim().is_empty())
+            .unwrap_or(model)
+            .trim()
+            .to_string();
+        let slug_base = row
+            .extra
+            .get("slug")
+            .and_then(Value::as_str)
+            .filter(|v| !v.trim().is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| {
+                if counts.get(model).copied().unwrap_or(0) > 1 {
+                    display_name.clone()
+                } else {
+                    model.to_string()
+                }
+            });
+        let mut slug = slugify(&slug_base);
+        if used.contains(&slug) {
+            slug = format!("{slug}-{index}");
+        }
+        while used.contains(&slug) {
+            slug = format!("{slug}-{}", used.len());
+        }
+        used.insert(slug.clone());
+        out.push(ShimModel {
+            slug,
+            model: model.to_string(),
+            display_name,
+            provider: provider.to_string(),
+            index,
+            max_context_limit: row.max_context_limit,
+            no_image_support: row.no_image_support,
+        });
+    }
+    out
+}
+
+pub fn default_model_slug(models: &[ShimModel], passthrough_available: bool) -> String {
+    if passthrough_available {
+        "gpt-5.5".to_string()
+    } else {
+        models
+            .first()
+            .map(|model| model.slug.clone())
+            .unwrap_or_else(|| "gpt-5.5".to_string())
+    }
 }
 
 fn slugify(value: &str) -> String {

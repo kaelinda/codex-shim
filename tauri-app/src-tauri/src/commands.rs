@@ -3,14 +3,15 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use crate::catalog;
 use crate::config::{self, AuthSnapshot};
 use crate::embedded_shim::EmbeddedStatus;
 use crate::error::{AppError, AppResult};
 use crate::health::{self, HealthSnapshot};
 use crate::models::{self, ModelsFile};
 use crate::paths::{
-    codex_auth_path, codex_config_path, default_settings_path, detect_project_root, log_path,
-    DEFAULT_PORT,
+    catalog_path, codex_auth_path, codex_config_path, default_settings_path, detect_project_root,
+    generated_config_path, log_path, DEFAULT_PORT,
 };
 use crate::shim::{CliOutput, ShimInvocation};
 use crate::state::AppState;
@@ -141,6 +142,37 @@ fn embedded_cli_output(status: EmbeddedStatus, args: &[&str], ok: bool) -> CliOu
     }
 }
 
+async fn generate_catalog_and_config(state: &State<'_, AppState>) -> AppResult<CliOutput> {
+    let (settings_path, port, _, _) = current_settings(state);
+    let file = models::read_file(&settings_path).await?;
+    let rows = models::model_rows(&file);
+    let auth = config::read_codex_auth(&codex_auth_path()).await?;
+    let catalog_path = catalog_path();
+    let config_path = generated_config_path();
+    catalog::write_catalog(&rows, &catalog_path, auth.passthrough_available).await?;
+    catalog::write_generated_config(
+        &rows,
+        &config_path,
+        &catalog_path,
+        port,
+        auth.passthrough_available,
+    )
+    .await?;
+    Ok(CliOutput {
+        command: "embedded-shim".to_string(),
+        args: vec!["generate".to_string()],
+        status: Some(0),
+        stdout: format!(
+            "Generated {} model entries:\n  catalog: {}\n  config:  {}\nNo files under ~/.codex were modified.\n",
+            rows.len(),
+            catalog_path.display(),
+            config_path.display()
+        ),
+        stderr: String::new(),
+        ok: true,
+    })
+}
+
 #[tauri::command]
 pub async fn shim_status(state: State<'_, AppState>) -> AppResult<ShimStatus> {
     let port = current_settings(&state).1;
@@ -179,17 +211,69 @@ pub async fn shim_restart(state: State<'_, AppState>) -> AppResult<CliOutput> {
 
 #[tauri::command]
 pub async fn shim_generate(state: State<'_, AppState>) -> AppResult<CliOutput> {
-    run_cli(&state, &["generate"]).await
+    generate_catalog_and_config(&state).await
 }
 
 #[tauri::command]
 pub async fn shim_enable(state: State<'_, AppState>) -> AppResult<CliOutput> {
-    run_cli(&state, &["enable"]).await
+    let (settings_path, port, _, _) = current_settings(&state);
+    let file = models::read_file(&settings_path).await?;
+    let rows = models::model_rows(&file);
+    let auth = config::read_codex_auth(&codex_auth_path()).await?;
+    let catalog_path = catalog_path();
+    let config_path = generated_config_path();
+    catalog::write_catalog(&rows, &catalog_path, auth.passthrough_available).await?;
+    catalog::write_generated_config(
+        &rows,
+        &config_path,
+        &catalog_path,
+        port,
+        auth.passthrough_available,
+    )
+    .await?;
+    let default_slug = models::default_model_slug(&rows, auth.passthrough_available);
+    config::install_codex_config(
+        &codex_config_path(),
+        &rows,
+        auth.passthrough_available,
+        &default_slug,
+        port,
+    )
+    .await?;
+    let status = state.embedded_shim.start(settings_path, port).await?;
+    Ok(CliOutput {
+        command: "embedded-shim".to_string(),
+        args: vec!["enable".to_string()],
+        status: Some(0),
+        stdout: format!(
+            "Generated catalog/config, installed ~/.codex config, and ensured embedded shim is running.\n{}\n",
+            status.message
+        ),
+        stderr: String::new(),
+        ok: true,
+    })
 }
 
 #[tauri::command]
 pub async fn shim_disable(state: State<'_, AppState>) -> AppResult<CliOutput> {
-    run_cli(&state, &["disable"]).await
+    let restored_backup = config::restore_codex_config(&codex_config_path()).await?;
+    let status = state.embedded_shim.stop();
+    Ok(CliOutput {
+        command: "embedded-shim".to_string(),
+        args: vec!["disable".to_string()],
+        status: Some(0),
+        stdout: format!(
+            "{}\n{}\n",
+            if restored_backup {
+                "Restored original ~/.codex/config.toml."
+            } else {
+                "Removed codex-shim managed config from ~/.codex/config.toml."
+            },
+            status.message
+        ),
+        stderr: String::new(),
+        ok: true,
+    })
 }
 
 #[tauri::command]
@@ -243,7 +327,27 @@ pub async fn shim_use_model(slug: String, state: State<'_, AppState>) -> AppResu
         return Err(AppError::msg("slug 不能为空"));
     }
     let (_, port, _, _) = current_settings(&state);
-    config::install_codex_model_config(&codex_config_path(), slug.trim(), port).await?;
+    let (settings_path, _, _, _) = current_settings(&state);
+    let file = models::read_file(&settings_path).await?;
+    let rows = models::model_rows(&file);
+    let auth = config::read_codex_auth(&codex_auth_path()).await?;
+    catalog::write_catalog(&rows, &catalog_path(), auth.passthrough_available).await?;
+    catalog::write_generated_config(
+        &rows,
+        &generated_config_path(),
+        &catalog_path(),
+        port,
+        auth.passthrough_available,
+    )
+    .await?;
+    config::install_codex_config(
+        &codex_config_path(),
+        &rows,
+        auth.passthrough_available,
+        slug.trim(),
+        port,
+    )
+    .await?;
     Ok(CliOutput {
         command: "embedded-shim".to_string(),
         args: vec!["model".to_string(), "use".to_string(), slug],

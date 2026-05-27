@@ -1,13 +1,13 @@
 # Codex Shim Control
 
 A Tauri v2 desktop GUI with an embedded Rust shim service. It lets you
-start/stop the local shim, edit `~/.codex-shim/models.json`,
-switch the active Codex Desktop model, and tail `shim.log` — without leaving
-the CLI behind, just on top of it.
+start/stop the local shim, edit `~/.codex-shim/models.json`, generate the Codex
+model catalog/config, switch the active Codex Desktop model, and tail
+`shim.log`.
 
 The app is being migrated away from the Python daemon path. Dashboard
-Start/Stop/Restart, health checks, model listing, and active-model switching now
-use the app's embedded Rust service. Catalog generation, Codex Desktop launch,
+Start/Stop/Restart, Generate, Enable/Disable, health checks, model listing, and
+active-model switching now use Rust code inside the app. Codex Desktop launch
 and macOS picker patch/restore still delegate to the `codex-shim` CLI until
 their Rust replacements land.
 
@@ -16,14 +16,15 @@ their Rust replacements land.
 ## 它能做什么
 
 - **Dashboard**：daemon 状态卡片、健康检查、Codex 登录态、当前 active model；
-  一键 Start / Stop / Restart；启动的是 app 内置 Rust shim 服务。Generate /
-  Enable / Disable 与 macOS picker patch / restore 暂时仍走兼容 CLI 路径。
+  一键 Start / Stop / Restart / Generate / Enable / Disable。Start/Enable
+  启动的是 app 内置 Rust shim 服务，Generate 会写入 app runtime 下的 catalog/config。
+  macOS picker patch / restore 暂时仍走兼容 CLI 路径。
 - **Models**：直接读写父级仓库的 `~/.codex-shim/models.json`。支持表格 CRUD
   （新增、编辑、删除、上移、下移），也提供「直接编辑 JSON」开关。写入前会校验
   必填字段和 `provider` 是否在后端支持列表中，包括 OpenAI、Anthropic、DeepSeek、
   小米 MiMo、MiniMax、Kimi/Moonshot、阿里云百炼/DashScope、火山方舟等。
-- **Active model**：从 `codex-shim list` 拉取所有 slug，点击即可调用
-  `codex-shim model use <slug>`，写到 `~/.codex/config.toml` 的 managed block。
+- **Active model**：从 Rust 侧读取所有 slug，点击即可由 app 写到
+  `~/.codex/config.toml` 的 managed block。
 - **Logs**：tail 父级仓库的 `.codex-shim/shim.log`，可调 tail 大小（8K~512K），
   可开 2s 自动刷新。
 - **Settings**：覆盖默认 `models.json` 路径、端口、CLI 可执行文件、project root
@@ -55,9 +56,9 @@ their Rust replacements land.
 - Node.js ≥ 18 + pnpm/npm（任选其一，本项目脚本写的是 `npm`）。
 - Rust（稳定版）+ 平台对应的 Tauri 系统依赖，参考
   <https://v2.tauri.app/start/prerequisites/>。
-- Python 3.11+ 仅在使用 Generate / Enable / Disable / 启动 Codex Desktop /
-  macOS picker patch 等兼容 CLI 功能时需要。内置 Rust shim 的 Start / Stop /
-  Health / Models / Active model 不依赖 Python。需要 CLI 时，应用会按下面的顺序探测：
+- Python 3.11+ 仅在使用启动 Codex Desktop、macOS picker patch / restore 等兼容
+  CLI 功能时需要。内置 Rust shim 的 Start / Stop / Health / Models /
+  Generate / Enable / Disable / Active model 不依赖 Python。需要 CLI 时，应用会按下面的顺序探测：
   1. Settings 里你填的「codex-shim CLI」路径；
   2. `which codex-shim`；
   3. `python3 -m codex_shim.cli`（fallback：在仓库根目录运行）。
@@ -103,6 +104,8 @@ npx @tauri-apps/cli icon icons/source.png
 - 默认从 `~/.codex-shim/models.json` 读写模型清单（与 CLI 完全一致）。
 - Dashboard Start 启动 app 内置 Rust HTTP 服务，监听 `127.0.0.1:<port>`，
   提供 `/health`、`/v1/models`、`/v1/responses`、`/v1/chat/completions`。
+- Generate 由 app 写入 `~/.codex-shim/app/custom_model_catalog.json` 和
+  `~/.codex-shim/app/config.toml`，不再调用 Python CLI。
 - Active model 直接由 app 写入 `~/.codex/config.toml` 的 managed block，
   指向内置服务的 `/v1` endpoint。
 - ChatGPT passthrough 的状态来自直接读取 `~/.codex/auth.json`（只看
@@ -112,8 +115,8 @@ npx @tauri-apps/cli icon icons/source.png
 
 - Windows 上的 macOS picker patch 按钮会被自动隐藏；其他平台 `patch-app /
   restore-app` 会原样转发到 CLI，CLI 会自己报错。
-- 内置 Rust shim 当前优先覆盖 OpenAI-compatible 的非流式代理路径；
-  Anthropic、ChatGPT passthrough、完整 streaming parity 仍在迁移中。
+- 内置 Rust shim 当前覆盖 OpenAI-compatible 的非流式与 streaming
+  `/v1/responses` 主路径；Anthropic 与 ChatGPT passthrough 的 Rust 迁移仍在进行中。
 - 因为 Tauri v2 的 capability 系统比较新，如果你换了 Tauri 次版本，可能需要
   调整 `src-tauri/capabilities/default.json` 里的 permission 列表。
 
@@ -176,7 +179,9 @@ tauri-app/
     └── src/
         ├── main.rs, lib.rs
         ├── commands.rs        # 所有 #[tauri::command]
-        ├── shim.rs            # 调用 codex-shim CLI
+        ├── embedded_shim.rs   # app 内置 Rust HTTP shim
+        ├── catalog.rs         # Codex model catalog/config 生成
+        ├── shim.rs            # 兼容调用 codex-shim CLI
         ├── models.rs          # models.json 读写 + 校验
         ├── config.rs          # auth.json + config.toml + tail 日志
         ├── health.rs          # /health 探活

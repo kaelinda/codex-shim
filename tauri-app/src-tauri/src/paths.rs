@@ -21,6 +21,22 @@ pub fn codex_config_path() -> PathBuf {
     home_dir().join(".codex").join("config.toml")
 }
 
+pub fn app_runtime_dir() -> PathBuf {
+    home_dir().join(".codex-shim").join("app")
+}
+
+pub fn catalog_path() -> PathBuf {
+    app_runtime_dir().join("custom_model_catalog.json")
+}
+
+pub fn generated_config_path() -> PathBuf {
+    app_runtime_dir().join("config.toml")
+}
+
+pub fn codex_config_backup_path() -> PathBuf {
+    app_runtime_dir().join("config.toml.before-codex-shim")
+}
+
 /// Project root that contains the `codex_shim/` python package. We try a few
 /// likely locations so the GUI works whether the user opens it from inside the
 /// `tauri-app/` checkout or after installing the CLI globally.

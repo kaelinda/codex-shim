@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::fs;
 
-use crate::error::AppResult;
+use crate::catalog;
+use crate::error::{AppError, AppResult};
+use crate::models::ShimModel;
+use crate::paths::codex_config_backup_path;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuthSnapshot {
@@ -89,23 +92,45 @@ pub async fn read_active_model(config_path: &Path) -> AppResult<Option<String>> 
     Ok(None)
 }
 
-pub async fn install_codex_model_config(config_path: &Path, model_slug: &str, port: u16) -> AppResult<()> {
-    const MANAGED_BEGIN: &str = "# >>> codex-shim managed";
-    const MANAGED_END: &str = "# <<< codex-shim managed";
-
+pub async fn install_codex_config(
+    config_path: &Path,
+    models: &[ShimModel],
+    passthrough_available: bool,
+    model_slug: &str,
+    port: u16,
+) -> AppResult<()> {
+    if !passthrough_available && !models.iter().any(|model| model.slug == model_slug || model.model == model_slug) {
+        return Err(AppError::msg(format!("Unknown shim model {model_slug:?}")));
+    }
+    let selected = models
+        .iter()
+        .find(|model| model.slug == model_slug || model.model == model_slug)
+        .map(|model| model.slug.clone())
+        .unwrap_or_else(|| model_slug.to_string());
     let original = if config_path.exists() {
         fs::read_to_string(config_path).await?
     } else {
         String::new()
     };
+    let backup_path = codex_config_backup_path();
+    if !original.contains(MANAGED_BEGIN) && !backup_path.exists() {
+        if let Some(parent) = backup_path.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+        fs::write(&backup_path, &original).await?;
+    }
     let cleaned = remove_managed_config(&original);
+    let cleaned = remove_top_level_keys(&cleaned, &["model", "model_provider", "model_catalog_json"]);
+    let cleaned = remove_section(&cleaned, "model_providers.codex_shim");
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent).await?;
     }
+    let catalog_path = crate::paths::catalog_path();
     let block = format!(
         r#"{MANAGED_BEGIN}
-model = "{model_slug}"
+model = "{}"
 model_provider = "codex_shim"
+model_catalog_json = "{}"
 {MANAGED_END}
 
 {MANAGED_BEGIN}
@@ -118,15 +143,38 @@ request_max_retries = 3
 stream_max_retries = 3
 stream_idle_timeout_ms = 600000
 {MANAGED_END}
-"#
+"#,
+        catalog::toml_escape(&selected),
+        catalog::toml_escape(&catalog_path.display().to_string()),
     );
     fs::write(config_path, format!("{block}\n{}", cleaned.trim_start())).await?;
     Ok(())
 }
 
+pub async fn restore_codex_config(config_path: &Path) -> AppResult<bool> {
+    let backup_path = codex_config_backup_path();
+    if backup_path.exists() {
+        let backup = fs::read_to_string(&backup_path).await?;
+        if let Some(parent) = config_path.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+        fs::write(config_path, backup).await?;
+        fs::remove_file(backup_path).await?;
+        return Ok(true);
+    }
+    if config_path.exists() {
+        let current = fs::read_to_string(config_path).await?;
+        let restored = remove_section(&remove_managed_config(&current), "model_providers.codex_shim");
+        fs::write(config_path, restored.trim_start()).await?;
+        return Ok(false);
+    }
+    Ok(false)
+}
+
+const MANAGED_BEGIN: &str = "# >>> codex-shim managed";
+const MANAGED_END: &str = "# <<< codex-shim managed";
+
 fn remove_managed_config(text: &str) -> String {
-    const MANAGED_BEGIN: &str = "# >>> codex-shim managed";
-    const MANAGED_END: &str = "# <<< codex-shim managed";
     let mut current = text.to_string();
     while let Some(start) = current.find(MANAGED_BEGIN) {
         let Some(end_rel) = current[start..].find(MANAGED_END) else {
@@ -137,6 +185,50 @@ fn remove_managed_config(text: &str) -> String {
         current.replace_range(start..end, "");
     }
     current
+}
+
+fn remove_top_level_keys(text: &str, keys: &[&str]) -> String {
+    let mut output = Vec::new();
+    let mut in_top_level = true;
+    for line in text.lines() {
+        let stripped = line.trim();
+        if stripped.starts_with('[') {
+            in_top_level = false;
+        }
+        let key = stripped.split_once('=').map(|(key, _)| key.trim());
+        if in_top_level && key.map(|key| keys.contains(&key)).unwrap_or(false) {
+            continue;
+        }
+        output.push(line);
+    }
+    let mut joined = output.join("\n");
+    if text.ends_with('\n') {
+        joined.push('\n');
+    }
+    joined
+}
+
+fn remove_section(text: &str, section: &str) -> String {
+    let mut output = Vec::new();
+    let mut skipping = false;
+    let header = format!("[{section}]");
+    for line in text.lines() {
+        let stripped = line.trim();
+        if stripped.starts_with('[') && stripped.ends_with(']') {
+            skipping = stripped == header;
+            if skipping {
+                continue;
+            }
+        }
+        if !skipping {
+            output.push(line);
+        }
+    }
+    let mut joined = output.join("\n");
+    if text.ends_with('\n') {
+        joined.push('\n');
+    }
+    joined
 }
 
 pub async fn tail_log(path: &Path, max_bytes: usize) -> AppResult<String> {

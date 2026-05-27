@@ -1,4 +1,5 @@
 mod commands;
+mod catalog;
 mod config;
 mod embedded_shim;
 mod error;
