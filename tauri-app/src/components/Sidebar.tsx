@@ -13,7 +13,7 @@ const TABS: { key: TabKey; label: string; icon: IconName; hint: string }[] = [
   { key: "models", label: "Models", icon: "models", hint: "编辑 models.json" },
   { key: "active", label: "Active", icon: "active", hint: "切换 Codex 默认 model" },
   { key: "logs", label: "Logs", icon: "logs", hint: "查看 shim.log" },
-  { key: "settings", label: "Settings", icon: "settings", hint: "CLI / 端口 / 路径" },
+  { key: "settings", label: "Settings", icon: "settings", hint: "端口 / 路径" },
 ];
 
 export default function Sidebar({ active, onSelect, health, auth }: Props) {

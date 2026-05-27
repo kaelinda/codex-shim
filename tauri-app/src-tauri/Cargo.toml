@@ -25,11 +25,13 @@ anyhow = "1"
 base64 = "0.22"
 bytes = "1"
 futures-core = "0.3"
+hex = "0.4"
 http-body = "1"
 http-body-util = "0.1"
 hyper = { version = "1", features = ["http1", "server"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 pin-project-lite = "0.2"
+sha2 = "0.10"
 thiserror = "1"
 directories = "5"
 which = "6"

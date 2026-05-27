@@ -6,7 +6,6 @@ mod error;
 mod health;
 mod models;
 mod paths;
-mod shim;
 
 use commands::*;
 
@@ -53,8 +52,6 @@ pub mod state {
     pub struct AppSettings {
         pub settings_path: PathBuf,
         pub port: u16,
-        pub cli_override: Option<String>,
-        pub project_root_override: Option<PathBuf>,
     }
 
     impl Default for AppSettings {
@@ -62,8 +59,6 @@ pub mod state {
             Self {
                 settings_path: default_settings_path(),
                 port: DEFAULT_PORT,
-                cli_override: None,
-                project_root_override: None,
             }
         }
     }

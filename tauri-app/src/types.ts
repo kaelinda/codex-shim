@@ -45,7 +45,6 @@ export interface RuntimeInfo {
   default_settings_path: string;
   codex_auth_path: string;
   codex_config_path: string;
-  detected_project_root: string | null;
   log_path: string;
   default_port: number;
   platform: string;
@@ -54,8 +53,6 @@ export interface RuntimeInfo {
 export interface AppSettingsDto {
   settings_path: string;
   port: number;
-  cli_override: string | null;
-  project_root_override: string | null;
 }
 
 export interface AuthSnapshot {

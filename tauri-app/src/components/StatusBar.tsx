@@ -19,8 +19,8 @@ export default function StatusBar({ runtime, settings }: Props) {
         models.json: {shortenPath(settings.settings_path)}
       </span>
       <span>·</span>
-      <span title={runtime.detected_project_root ?? "未检测到"}>
-        project: {runtime.detected_project_root ? shortenPath(runtime.detected_project_root) : "—"}
+      <span title={runtime.log_path}>
+        runtime: {shortenPath(runtime.log_path)}
       </span>
     </footer>
   );

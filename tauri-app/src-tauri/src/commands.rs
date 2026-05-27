@@ -1,7 +1,12 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tauri::State;
+use tokio::fs::{self, File};
+use tokio::io::AsyncReadExt;
+use tokio::process::Command;
 
 use crate::catalog;
 use crate::config::{self, AuthSnapshot};
@@ -10,18 +15,25 @@ use crate::error::{AppError, AppResult};
 use crate::health::{self, HealthSnapshot};
 use crate::models::{self, ModelsFile};
 use crate::paths::{
-    catalog_path, codex_auth_path, codex_config_path, default_settings_path, detect_project_root,
+    app_runtime_dir, catalog_path, codex_auth_path, codex_config_path, default_settings_path,
     generated_config_path, log_path, DEFAULT_PORT,
 };
-use crate::shim::{CliOutput, ShimInvocation};
 use crate::state::AppState;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CliOutput {
+    pub command: String,
+    pub args: Vec<String>,
+    pub status: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+    pub ok: bool,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettingsDto {
     pub settings_path: String,
     pub port: u16,
-    pub cli_override: Option<String>,
-    pub project_root_override: Option<String>,
 }
 
 impl AppSettingsDto {
@@ -30,11 +42,6 @@ impl AppSettingsDto {
         Self {
             settings_path: s.settings_path.display().to_string(),
             port: s.port,
-            cli_override: s.cli_override.clone(),
-            project_root_override: s
-                .project_root_override
-                .as_ref()
-                .map(|p| p.display().to_string()),
         }
     }
 }
@@ -45,26 +52,19 @@ pub struct RuntimeInfo {
     pub default_settings_path: String,
     pub codex_auth_path: String,
     pub codex_config_path: String,
-    pub detected_project_root: Option<String>,
     pub log_path: String,
     pub default_port: u16,
     pub platform: String,
 }
 
 #[tauri::command]
-pub async fn get_runtime_info(state: State<'_, AppState>) -> AppResult<RuntimeInfo> {
-    let override_root = {
-        let s = state.settings.lock().unwrap();
-        s.project_root_override.clone()
-    };
-    let detected = detect_project_root(override_root.as_deref());
-    let logp = log_path(detected.as_deref());
+pub async fn get_runtime_info(_state: State<'_, AppState>) -> AppResult<RuntimeInfo> {
+    let logp = log_path();
     Ok(RuntimeInfo {
         home_dir: crate::paths::home_dir().display().to_string(),
         default_settings_path: default_settings_path().display().to_string(),
         codex_auth_path: codex_auth_path().display().to_string(),
         codex_config_path: codex_config_path().display().to_string(),
-        detected_project_root: detected.map(|p| p.display().to_string()),
         log_path: logp.display().to_string(),
         default_port: DEFAULT_PORT,
         platform: std::env::consts::OS.to_string(),
@@ -80,8 +80,6 @@ pub async fn get_app_settings(state: State<'_, AppState>) -> AppResult<AppSettin
 pub async fn update_app_settings(
     settings_path: Option<String>,
     port: Option<u16>,
-    cli_override: Option<String>,
-    project_root_override: Option<String>,
     state: State<'_, AppState>,
 ) -> AppResult<AppSettingsDto> {
     {
@@ -95,34 +93,13 @@ pub async fn update_app_settings(
         if let Some(port) = port {
             s.port = port;
         }
-        s.cli_override = cli_override
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty());
-        s.project_root_override = project_root_override
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty())
-            .map(PathBuf::from);
     }
     Ok(AppSettingsDto::from_state(&state))
 }
 
-fn current_settings(state: &State<'_, AppState>) -> (PathBuf, u16, Option<String>, Option<PathBuf>) {
+fn current_settings(state: &State<'_, AppState>) -> (PathBuf, u16) {
     let s = state.settings.lock().unwrap();
-    (
-        s.settings_path.clone(),
-        s.port,
-        s.cli_override.clone(),
-        s.project_root_override.clone(),
-    )
-}
-
-async fn run_cli(state: &State<'_, AppState>, subcommand: &[&str]) -> AppResult<CliOutput> {
-    let (settings_path, port, cli_override, project_root_override) = current_settings(state);
-    let invocation = ShimInvocation::resolve(
-        cli_override.as_deref(),
-        project_root_override.as_deref(),
-    )?;
-    invocation.run(&settings_path, port, subcommand).await
+    (s.settings_path.clone(), s.port)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,7 +120,7 @@ fn embedded_cli_output(status: EmbeddedStatus, args: &[&str], ok: bool) -> CliOu
 }
 
 async fn generate_catalog_and_config(state: &State<'_, AppState>) -> AppResult<CliOutput> {
-    let (settings_path, port, _, _) = current_settings(state);
+    let (settings_path, port) = current_settings(state);
     let file = models::read_file(&settings_path).await?;
     let rows = models::model_rows(&file);
     let auth = config::read_codex_auth(&codex_auth_path()).await?;
@@ -190,7 +167,7 @@ pub async fn shim_health(state: State<'_, AppState>) -> AppResult<HealthSnapshot
 
 #[tauri::command]
 pub async fn shim_start(state: State<'_, AppState>) -> AppResult<CliOutput> {
-    let (settings_path, port, _, _) = current_settings(&state);
+    let (settings_path, port) = current_settings(&state);
     let status = state.embedded_shim.start(settings_path, port).await?;
     Ok(embedded_cli_output(status, &["start"], true))
 }
@@ -203,7 +180,7 @@ pub async fn shim_stop(state: State<'_, AppState>) -> AppResult<CliOutput> {
 
 #[tauri::command]
 pub async fn shim_restart(state: State<'_, AppState>) -> AppResult<CliOutput> {
-    let (settings_path, port, _, _) = current_settings(&state);
+    let (settings_path, port) = current_settings(&state);
     let _ = state.embedded_shim.stop();
     let status = state.embedded_shim.start(settings_path, port).await?;
     Ok(embedded_cli_output(status, &["restart"], true))
@@ -216,7 +193,7 @@ pub async fn shim_generate(state: State<'_, AppState>) -> AppResult<CliOutput> {
 
 #[tauri::command]
 pub async fn shim_enable(state: State<'_, AppState>) -> AppResult<CliOutput> {
-    let (settings_path, port, _, _) = current_settings(&state);
+    let (settings_path, port) = current_settings(&state);
     let file = models::read_file(&settings_path).await?;
     let rows = models::model_rows(&file);
     let auth = config::read_codex_auth(&codex_auth_path()).await?;
@@ -326,8 +303,7 @@ pub async fn shim_use_model(slug: String, state: State<'_, AppState>) -> AppResu
     if slug.trim().is_empty() {
         return Err(AppError::msg("slug 不能为空"));
     }
-    let (_, port, _, _) = current_settings(&state);
-    let (settings_path, _, _, _) = current_settings(&state);
+    let (settings_path, port) = current_settings(&state);
     let file = models::read_file(&settings_path).await?;
     let rows = models::model_rows(&file);
     let auth = config::read_codex_auth(&codex_auth_path()).await?;
@@ -365,17 +341,50 @@ pub async fn shim_launch_app(path: Option<String>, state: State<'_, AppState>) -
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or(".");
-    run_cli(&state, &["app", path]).await
+    let (settings_path, port) = current_settings(&state);
+    let file = models::read_file(&settings_path).await?;
+    let rows = models::model_rows(&file);
+    let auth = config::read_codex_auth(&codex_auth_path()).await?;
+    catalog::write_catalog(&rows, &catalog_path(), auth.passthrough_available).await?;
+    catalog::write_generated_config(
+        &rows,
+        &generated_config_path(),
+        &catalog_path(),
+        port,
+        auth.passthrough_available,
+    )
+    .await?;
+    let default_slug = models::default_model_slug(&rows, auth.passthrough_available);
+    config::install_codex_config(
+        &codex_config_path(),
+        &rows,
+        auth.passthrough_available,
+        &default_slug,
+        port,
+    )
+    .await?;
+    let status = state.embedded_shim.start(settings_path, port).await?;
+    let _ = quit_codex_app().await;
+    launch_codex_desktop(path).await?;
+    let _ = foreground_codex_app().await;
+    Ok(CliOutput {
+        command: "rust-launcher".to_string(),
+        args: vec!["app".to_string(), path.to_string()],
+        status: Some(0),
+        stdout: format!("Launched Codex Desktop and ensured embedded shim is running.\n{}\n", status.message),
+        stderr: String::new(),
+        ok: true,
+    })
 }
 
 #[tauri::command]
-pub async fn shim_patch_app(state: State<'_, AppState>) -> AppResult<CliOutput> {
-    run_cli(&state, &["patch-app"]).await
+pub async fn shim_patch_app(_state: State<'_, AppState>) -> AppResult<CliOutput> {
+    patch_codex_app().await
 }
 
 #[tauri::command]
-pub async fn shim_restore_app(state: State<'_, AppState>) -> AppResult<CliOutput> {
-    run_cli(&state, &["restore-app"]).await
+pub async fn shim_restore_app(_state: State<'_, AppState>) -> AppResult<CliOutput> {
+    restore_codex_app_bundle().await
 }
 
 #[tauri::command]
@@ -399,9 +408,8 @@ pub async fn write_models_file(
 
 #[tauri::command]
 pub async fn tail_log(state: State<'_, AppState>, max_bytes: Option<usize>) -> AppResult<String> {
-    let project = current_settings(&state).3;
-    let detected = detect_project_root(project.as_deref());
-    let path = log_path(detected.as_deref());
+    let _ = state;
+    let path = log_path();
     let bytes = max_bytes.unwrap_or(64 * 1024).min(1024 * 1024);
     config::tail_log(&path, bytes).await
 }
@@ -414,4 +422,282 @@ pub async fn read_codex_auth() -> AppResult<AuthSnapshot> {
 #[tauri::command]
 pub async fn current_active_model() -> AppResult<Option<String>> {
     config::read_active_model(&codex_config_path()).await
+}
+
+async fn quit_codex_app() -> AppResult<()> {
+    if !cfg!(target_os = "macos") {
+        return Ok(());
+    }
+    run_quiet(
+        "osascript",
+        &["-e", "tell application \"Codex\" to if it is running then quit"],
+    )
+    .await?;
+    Ok(())
+}
+
+async fn foreground_codex_app() -> AppResult<()> {
+    if !cfg!(target_os = "macos") {
+        return Ok(());
+    }
+    let script = r#"
+tell application "Codex" to activate
+delay 0.5
+tell application "System Events"
+  if exists process "Codex" then
+    tell process "Codex"
+      set frontmost to true
+      if (count of windows) is 0 then
+        keystroke "n" using command down
+        delay 0.3
+      end if
+      if (count of windows) > 0 then
+        set position of window 1 to {80, 60}
+        set size of window 1 to {1400, 980}
+      end if
+    end tell
+  end if
+end tell
+"#;
+    run_quiet("osascript", &["-e", script]).await?;
+    Ok(())
+}
+
+async fn launch_codex_desktop(path: &str) -> AppResult<()> {
+    if cfg!(target_os = "macos") {
+        let mut command = Command::new("open");
+        command
+            .args(["-a", "Codex", path])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        command.spawn()?;
+        Ok(())
+    } else {
+        Err(AppError::msg(
+            "Codex Desktop launch is currently implemented for macOS only.",
+        ))
+    }
+}
+
+async fn patch_codex_app() -> AppResult<CliOutput> {
+    if !cfg!(target_os = "macos") {
+        return Ok(CliOutput {
+            command: "rust-patch-app".to_string(),
+            args: vec!["patch-app".to_string()],
+            status: Some(1),
+            stdout: String::new(),
+            stderr: "Codex Desktop picker patch is only supported on macOS.".to_string(),
+            ok: false,
+        });
+    }
+    let app_asar = PathBuf::from("/Applications/Codex.app/Contents/Resources/app.asar");
+    let runtime = app_runtime_dir();
+    let backup = runtime.join("app.asar.before-codex-shim-model-picker-patch");
+    let workdir = runtime.join("app-asar-work");
+    let needle = "let u=c.useHiddenModels&&o!==`amazonBedrock`,d;";
+    let replacement = "let u=!1,d;";
+    if !app_asar.exists() {
+        return Ok(CliOutput {
+            command: "rust-patch-app".to_string(),
+            args: vec!["patch-app".to_string()],
+            status: Some(1),
+            stdout: String::new(),
+            stderr: format!("Codex app bundle not found at {}.", app_asar.display()),
+            ok: false,
+        });
+    }
+    if which::which("npx").is_err() {
+        return Ok(CliOutput {
+            command: "rust-patch-app".to_string(),
+            args: vec!["patch-app".to_string()],
+            status: Some(1),
+            stdout: String::new(),
+            stderr: "npx is required to patch the Electron asar bundle.".to_string(),
+            ok: false,
+        });
+    }
+    fs::create_dir_all(&runtime).await?;
+    let mut stdout = String::new();
+    if !backup.exists() {
+        fs::copy(&app_asar, &backup).await?;
+        stdout.push_str(&format!("Backed up original app.asar to {}.\n", backup.display()));
+    }
+    let hash = file_sha256(&app_asar).await?;
+    let versioned_backup = runtime.join(format!(
+        "app.asar.before-codex-shim-model-picker-patch.{}",
+        &hash[..12]
+    ));
+    if !versioned_backup.exists() {
+        fs::copy(&app_asar, &versioned_backup).await?;
+        stdout.push_str(&format!("Backed up current app.asar to {}.\n", versioned_backup.display()));
+    }
+    let _ = quit_codex_app().await;
+    if workdir.exists() {
+        fs::remove_dir_all(&workdir).await?;
+    }
+    fs::create_dir_all(&workdir).await?;
+    let extract = run_command(
+        "npx",
+        &["--yes", "asar", "extract", &app_asar.display().to_string(), &workdir.display().to_string()],
+    )
+    .await?;
+    if !extract.ok {
+        return Ok(extract);
+    }
+    let Some(bundle_file) = find_model_queries_bundle(&workdir, needle, replacement).await? else {
+        return Ok(CliOutput {
+            command: "rust-patch-app".to_string(),
+            args: vec!["patch-app".to_string()],
+            status: Some(1),
+            stdout,
+            stderr: "Could not find the expected model picker filter in Codex Desktop.".to_string(),
+            ok: false,
+        });
+    };
+    let text = fs::read_to_string(&bundle_file).await?;
+    if text.contains(replacement) {
+        stdout.push_str("Codex Desktop model picker patch is already applied.\n");
+    } else if text.contains(needle) {
+        fs::write(&bundle_file, text.replace(needle, replacement)).await?;
+        let pack = run_command(
+            "npx",
+            &["--yes", "asar", "pack", &workdir.display().to_string(), &app_asar.display().to_string()],
+        )
+        .await?;
+        if !pack.ok {
+            return Ok(pack);
+        }
+        stdout.push_str("Patched Codex Desktop model picker allowlist filter.\n");
+        let resign = run_command(
+            "codesign",
+            &["--force", "--deep", "--sign", "-", "/Applications/Codex.app"],
+        )
+        .await?;
+        if resign.ok {
+            stdout.push_str("Re-signed Codex.app after patch.\n");
+        } else {
+            return Ok(resign);
+        }
+    } else {
+        return Ok(CliOutput {
+            command: "rust-patch-app".to_string(),
+            args: vec!["patch-app".to_string()],
+            status: Some(1),
+            stdout,
+            stderr: "Could not find the expected model picker filter in Codex Desktop.".to_string(),
+            ok: false,
+        });
+    }
+    Ok(CliOutput {
+        command: "rust-patch-app".to_string(),
+        args: vec!["patch-app".to_string()],
+        status: Some(0),
+        stdout,
+        stderr: String::new(),
+        ok: true,
+    })
+}
+
+async fn restore_codex_app_bundle() -> AppResult<CliOutput> {
+    if !cfg!(target_os = "macos") {
+        return Ok(CliOutput {
+            command: "rust-restore-app".to_string(),
+            args: vec!["restore-app".to_string()],
+            status: Some(1),
+            stdout: String::new(),
+            stderr: "Codex Desktop picker restore is only supported on macOS.".to_string(),
+            ok: false,
+        });
+    }
+    let app_asar = PathBuf::from("/Applications/Codex.app/Contents/Resources/app.asar");
+    let backup = app_runtime_dir().join("app.asar.before-codex-shim-model-picker-patch");
+    if !backup.exists() {
+        return Ok(CliOutput {
+            command: "rust-restore-app".to_string(),
+            args: vec!["restore-app".to_string()],
+            status: Some(0),
+            stdout: format!("No app.asar backup found at {}.\n", backup.display()),
+            stderr: String::new(),
+            ok: true,
+        });
+    }
+    let _ = quit_codex_app().await;
+    fs::copy(&backup, &app_asar).await?;
+    Ok(CliOutput {
+        command: "rust-restore-app".to_string(),
+        args: vec!["restore-app".to_string()],
+        status: Some(0),
+        stdout: format!("Restored {} from {}.\n", app_asar.display(), backup.display()),
+        stderr: String::new(),
+        ok: true,
+    })
+}
+
+async fn run_quiet(program: &str, args: &[&str]) -> AppResult<CliOutput> {
+    let mut command = Command::new(program);
+    command.args(args).stdout(Stdio::null()).stderr(Stdio::null());
+    let status = command.status().await?;
+    Ok(CliOutput {
+        command: program.to_string(),
+        args: args.iter().map(|arg| (*arg).to_string()).collect(),
+        status: status.code(),
+        stdout: String::new(),
+        stderr: String::new(),
+        ok: status.success(),
+    })
+}
+
+async fn run_command(program: &str, args: &[&str]) -> AppResult<CliOutput> {
+    let output = Command::new(program).args(args).output().await?;
+    Ok(CliOutput {
+        command: program.to_string(),
+        args: args.iter().map(|arg| (*arg).to_string()).collect(),
+        status: output.status.code(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        ok: output.status.success(),
+    })
+}
+
+async fn file_sha256(path: &Path) -> AppResult<String> {
+    let mut file = File::open(path).await?;
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0_u8; 1024 * 1024];
+    loop {
+        let read = file.read(&mut buffer).await?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+async fn find_model_queries_bundle(
+    workdir: &Path,
+    needle: &str,
+    replacement: &str,
+) -> AppResult<Option<PathBuf>> {
+    let assets_dir = workdir.join("webview").join("assets");
+    if !assets_dir.exists() {
+        return Ok(None);
+    }
+    let mut read_dir = fs::read_dir(&assets_dir).await?;
+    let mut candidates = Vec::new();
+    while let Some(entry) = read_dir.next_entry().await? {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) == Some("js") {
+            let name = path.file_name().and_then(|name| name.to_str()).unwrap_or_default();
+            let priority = if name.starts_with("model-queries-") { 0 } else { 1 };
+            candidates.push((priority, path));
+        }
+    }
+    candidates.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    for (_, path) in candidates {
+        let text = fs::read_to_string(&path).await.unwrap_or_default();
+        if text.contains(needle) || text.contains(replacement) {
+            return Ok(Some(path));
+        }
+    }
+    Ok(None)
 }

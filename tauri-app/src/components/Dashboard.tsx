@@ -76,12 +76,12 @@ export default function Dashboard({
         </StatusCard>
 
         <StatusCard
-          title="项目"
-          statusLabel={runtime.detected_project_root ? "已检测" : "未检测到"}
-          tone={runtime.detected_project_root ? "ok" : "warn"}
+          title="Runtime"
+          statusLabel="内置"
+          tone="ok"
         >
-          <KV k="项目根目录" v={runtime.detected_project_root ?? "—"} />
           <KV k="日志路径" v={runtime.log_path} />
+          <KV k="模型配置" v={settings.settings_path} />
         </StatusCard>
       </div>
 

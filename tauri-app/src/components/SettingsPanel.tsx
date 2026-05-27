@@ -18,8 +18,6 @@ export default function SettingsPanel({ runtime, settings, onUpdated, flash }: P
   const ids = {
     settingsPath: `${idPrefix}-settings-path`,
     port: `${idPrefix}-port`,
-    cliOverride: `${idPrefix}-cli-override`,
-    projectRoot: `${idPrefix}-project-root`,
   };
 
   const save = async () => {
@@ -28,8 +26,6 @@ export default function SettingsPanel({ runtime, settings, onUpdated, flash }: P
       const next = await api.updateAppSettings({
         settings_path: draft.settings_path,
         port: draft.port,
-        cli_override: draft.cli_override,
-        project_root_override: draft.project_root_override,
       });
       setDraft(next);
       await onUpdated(next);
@@ -41,15 +37,8 @@ export default function SettingsPanel({ runtime, settings, onUpdated, flash }: P
     }
   };
 
-  const pickFile = async (key: "settings_path" | "cli_override") => {
+  const pickFile = async (key: "settings_path") => {
     const picked = await open({ multiple: false, directory: false });
-    if (typeof picked === "string") {
-      setDraft({ ...draft, [key]: picked });
-    }
-  };
-
-  const pickDir = async (key: "project_root_override") => {
-    const picked = await open({ multiple: false, directory: true });
     if (typeof picked === "string") {
       setDraft({ ...draft, [key]: picked });
     }
@@ -77,28 +66,6 @@ export default function SettingsPanel({ runtime, settings, onUpdated, flash }: P
             onChange={(e) => setDraft({ ...draft, port: Number(e.target.value) || 0 })}
           />
         </Row>
-        <Row label="codex-shim CLI" htmlFor={ids.cliOverride}>
-          <input
-            id={ids.cliOverride}
-            type="text"
-            value={draft.cli_override ?? ""}
-            onChange={(e) => setDraft({ ...draft, cli_override: e.target.value || null })}
-            placeholder="留空表示自动 (PATH/codex-shim or python3 -m codex_shim.cli)"
-          />
-          <button type="button" onClick={() => pickFile("cli_override")}><Icon name="file" />选择</button>
-        </Row>
-        <Row label="project root" htmlFor={ids.projectRoot}>
-          <input
-            id={ids.projectRoot}
-            type="text"
-            value={draft.project_root_override ?? ""}
-            onChange={(e) =>
-              setDraft({ ...draft, project_root_override: e.target.value || null })
-            }
-            placeholder="留空时自动从 cwd 向上查找 codex_shim/ 目录"
-          />
-          <button type="button" onClick={() => pickDir("project_root_override")}><Icon name="file" />选择</button>
-        </Row>
         <div className="btn-row">
           <button type="button" className="primary" onClick={save} disabled={busy}>
             <Icon name="save" />保存
@@ -119,7 +86,6 @@ export default function SettingsPanel({ runtime, settings, onUpdated, flash }: P
         <KV k="default models.json" v={runtime.default_settings_path} />
         <KV k="codex auth.json" v={runtime.codex_auth_path} />
         <KV k="codex config.toml" v={runtime.codex_config_path} />
-        <KV k="detected project root" v={runtime.detected_project_root ?? "—"} />
         <KV k="log path" v={runtime.log_path} />
         <KV k="default port" v={String(runtime.default_port)} />
       </Section>

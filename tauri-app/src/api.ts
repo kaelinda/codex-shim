@@ -19,8 +19,6 @@ export const api = useMock ? buildMockApi() : {
   updateAppSettings: (payload: {
     settings_path?: string;
     port?: number;
-    cli_override?: string | null;
-    project_root_override?: string | null;
   }) => invoke<AppSettingsDto>("update_app_settings", payload),
   status: () => invoke<ShimStatus>("shim_status"),
   health: () => invoke<HealthSnapshot>("shim_health"),
@@ -53,8 +51,6 @@ function buildMockApi() {
     updateAppSettings: (payload: {
       settings_path?: string;
       port?: number;
-      cli_override?: string | null;
-      project_root_override?: string | null;
     }) => invoke<AppSettingsDto>("update_app_settings", payload),
     status: () => invoke<ShimStatus>("shim_status"),
     health: () => invoke<HealthSnapshot>("shim_health"),
@@ -93,15 +89,14 @@ function mockData(key: string, args: unknown[]): unknown {
         default_settings_path: "~/.codex-shim/models.json",
         codex_auth_path: "~/.codex/auth.json",
         codex_config_path: "~/.codex/config.toml",
-        detected_project_root: null,
-        log_path: ".codex-shim/shim.log",
+        log_path: "~/.codex-shim/app/shim.log",
         default_port: 8765,
         platform: "macos",
       };
     case "appSettings":
-      return { settings_path: "~/.codex-shim/models.json", port: 8765, cli_override: null, project_root_override: null };
+      return { settings_path: "~/.codex-shim/models.json", port: 8765 };
     case "updateAppSettings":
-      return { settings_path: "~/.codex-shim/models.json", port: 8765, cli_override: null, project_root_override: null };
+      return { settings_path: "~/.codex-shim/models.json", port: 8765 };
     case "status":
       return {
         cli: { command: "codex-shim", args: ["status"], status: 0, stdout: "Shim is stopped.", stderr: "", ok: true },
