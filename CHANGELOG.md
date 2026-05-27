@@ -7,6 +7,12 @@ and this project does not yet follow semantic versioning (pre-1.0).
 
 ## Unreleased
 
+### Added
+
+- Xiaomi MiMo provider support (`mimo`) with default base URL
+  `https://token-plan-cn.xiaomimimo.com/v1` and presets for `mimo-v2.5-pro`
+  / `mimo-v2.5`.
+
 ## 0.2.0 — 2026-05-27
 
 ### 中文

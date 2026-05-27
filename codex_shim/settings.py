@@ -16,6 +16,7 @@ OPENAI_CHAT_PROVIDERS = {
     "openai",
     "generic-chat-completion-api",
     "deepseek",
+    "mimo",
     "minimax",
     "moonshot",
     "dashscope",

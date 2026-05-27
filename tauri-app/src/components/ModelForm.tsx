@@ -12,6 +12,7 @@ const BASE_URL_DEFAULTS: Record<Provider, string> = {
   anthropic: "https://api.anthropic.com/v1",
   "generic-chat-completion-api": "",
   deepseek: "https://api.deepseek.com",
+  mimo: "https://token-plan-cn.xiaomimimo.com/v1",
   minimax: "https://api.minimax.io/v1",
   moonshot: "https://api.moonshot.cn/v1",
   dashscope: "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -37,6 +38,10 @@ const MODEL_PRESETS: Record<Provider, { model: string; display: string }[]> = {
     { model: "deepseek-v4-flash", display: "DeepSeek V4 Flash" },
     { model: "deepseek-chat", display: "DeepSeek Chat (legacy)" },
     { model: "deepseek-reasoner", display: "DeepSeek Reasoner (legacy)" },
+  ],
+  mimo: [
+    { model: "mimo-v2.5-pro", display: "MiMo V2.5 Pro" },
+    { model: "mimo-v2.5", display: "MiMo V2.5" },
   ],
   minimax: [
     { model: "MiniMax-M2", display: "MiniMax M2" },

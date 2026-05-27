@@ -67,8 +67,8 @@ def test_catalog_preserves_context_and_visibility():
 
 
 def test_first_class_openai_compatible_providers_route_as_chat():
-    settings = ModelSettingsFixture.with_providers(["minimax", "moonshot", "dashscope", "volcengine"])
-    assert [model.provider for model in settings] == ["minimax", "moonshot", "dashscope", "volcengine"]
+    settings = ModelSettingsFixture.with_providers(["mimo", "minimax", "moonshot", "dashscope", "volcengine"])
+    assert [model.provider for model in settings] == ["mimo", "minimax", "moonshot", "dashscope", "volcengine"]
     assert all(model.is_openai_chat for model in settings)
 
 

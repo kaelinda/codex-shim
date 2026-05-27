@@ -294,6 +294,14 @@ Recommended schema:
       "no_image_support": true
     },
     {
+      "model": "mimo-v2.5-pro",
+      "provider": "mimo",
+      "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
+      "api_key": "…",
+      "display_name": "MiMo V2.5 Pro",
+      "no_image_support": true
+    },
+    {
       "model": "MiniMax-M2",
       "provider": "minimax",
       "base_url": "https://api.minimax.io/v1",
@@ -336,6 +344,7 @@ Supported `provider` values:
 | `openai` | OpenAI `/v1/chat/completions` |
 | `generic-chat-completion-api` | OpenAI-shaped chat completions |
 | `deepseek` | DeepSeek OpenAI-compatible `/v1/chat/completions` |
+| `mimo` | Xiaomi MiMo OpenAI-compatible `/v1/chat/completions` |
 | `minimax` | MiniMax OpenAI-compatible `/v1/chat/completions` |
 | `moonshot` | Moonshot/Kimi OpenAI-compatible `/v1/chat/completions` |
 | `dashscope` | Alibaba Cloud Bailian/DashScope OpenAI-compatible `/compatible-mode/v1/chat/completions` |
@@ -346,8 +355,8 @@ Provider notes:
 
 - Set `base_url` to the API root, not the final `/chat/completions` path. The
   shim appends `/chat/completions` or `/messages` itself.
-- MiniMax, Kimi, DeepSeek, Bailian/DashScope, and Volcengine all route through
-  the OpenAI-compatible chat-completions translator.
+- MiMo, MiniMax, Kimi, DeepSeek, Bailian/DashScope, and Volcengine all route
+  through the OpenAI-compatible chat-completions translator.
 - DeepSeek models receive Codex reasoning requests as `thinking:
   {"type":"enabled"}`. `kimi-*` models receive `thinking:
   {"type":"enabled","keep":"all"}` so multi-turn Kimi reasoning can be carried
@@ -485,9 +494,9 @@ Codex Desktop ── /v1/responses ──▶ codex-shim (127.0.0.1:8765)
                                      │           (Authorization: Bearer <auth.json access_token>)
                                      │
                                      ├── provider "openai" / "generic-…"
-                                     │         / "deepseek" / "minimax"
-                                     │         / "moonshot" / "dashscope"
-                                     │         / "volcengine"
+                                     │         / "deepseek" / "mimo"
+                                     │         / "minimax" / "moonshot"
+                                     │         / "dashscope" / "volcengine"
                                      │       └─▶ baseUrl/chat/completions
                                      │           (Authorization: Bearer apiKey)
                                      │

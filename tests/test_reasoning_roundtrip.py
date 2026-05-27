@@ -155,6 +155,20 @@ def test_moonshot_legacy_model_drops_thinking_option():
     assert "thinking" not in result
 
 
+def test_mimo_provider_drops_codex_thinking_option():
+    result = responses_to_chat(
+        {
+            "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Hi"}]}],
+            "thinking": True,
+            "stream": True,
+        },
+        upstream_model="mimo-v2.5-pro",
+        provider="mimo",
+    )
+
+    assert "thinking" not in result
+
+
 def test_kimi_model_keeps_thinking_option():
     result = responses_to_chat(
         {

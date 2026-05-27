@@ -74,6 +74,7 @@ export const PROVIDERS = [
   "anthropic",
   "generic-chat-completion-api",
   "deepseek",
+  "mimo",
   "minimax",
   "moonshot",
   "dashscope",
