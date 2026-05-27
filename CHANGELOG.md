@@ -7,11 +7,68 @@ and this project does not yet follow semantic versioning (pre-1.0).
 
 ## Unreleased
 
-### Added
+## 0.3.0 — 2026-05-27
 
-- Xiaomi MiMo provider support (`mimo`) with default base URL
-  `https://token-plan-cn.xiaomimimo.com/v1` and presets for `mimo-v2.5-pro`
-  / `mimo-v2.5`.
+### 中文
+
+#### 新增
+
+- 增加小米 MiMo provider 支持，默认 `base_url` 为
+  `https://token-plan-cn.xiaomimimo.com/v1`，并内置 `mimo-v2.5-pro` /
+  `mimo-v2.5` 模型预设。
+- Tauri 控制台现在内置 Rust shim 服务，可直接提供 `/health`、`/v1/models`、
+  `/v1/responses` 和 `/v1/chat/completions`。
+
+#### 优化
+
+- Tauri app 的 Start / Stop / Restart / Generate / Enable / Disable /
+  Active model / Codex launch 流程改为 Rust 原生实现，不再依赖 Python 项目或
+  `codex-shim` CLI。
+- 内置 Rust shim 覆盖 OpenAI-compatible、Anthropic Messages 和 ChatGPT
+  passthrough 主路径，支持流式 Responses 转换、tool call、reasoning/thinking
+  片段和 MiniMax `reasoning_details[]`。
+- macOS picker patch / restore 改为 Tauri Rust 命令执行，仍使用本机 `npx asar`
+  和 `codesign`。
+- README 与 Tauri app README 补充独立桌面应用、MiMo 和内置服务说明。
+
+#### 验证
+
+- `cargo check --offline`
+- `cargo test --offline`
+- `npm run build`
+- `npm run tauri:build`
+- `git diff --check`
+
+### English
+
+#### Added
+
+- Xiaomi MiMo provider support with the default base URL
+  `https://token-plan-cn.xiaomimimo.com/v1` and built-in presets for
+  `mimo-v2.5-pro` / `mimo-v2.5`.
+- The Tauri control app now embeds a Rust shim service serving `/health`,
+  `/v1/models`, `/v1/responses`, and `/v1/chat/completions`.
+
+#### Changed
+
+- Tauri Start / Stop / Restart / Generate / Enable / Disable / Active model /
+  Codex launch flows now run through native Rust code instead of depending on
+  the Python project or `codex-shim` CLI.
+- The embedded Rust shim covers the main OpenAI-compatible, Anthropic Messages,
+  and ChatGPT passthrough paths, including streaming Responses conversion, tool
+  calls, reasoning/thinking chunks, and MiniMax `reasoning_details[]`.
+- macOS picker patch / restore now run from Tauri Rust commands while still
+  using local `npx asar` and `codesign`.
+- Root and Tauri app READMEs now document the standalone desktop app, MiMo, and
+  embedded service behavior.
+
+#### Verified
+
+- `cargo check --offline`
+- `cargo test --offline`
+- `npm run build`
+- `npm run tauri:build`
+- `git diff --check`
 
 ## 0.2.0 — 2026-05-27
 

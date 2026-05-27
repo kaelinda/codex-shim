@@ -31,6 +31,18 @@ code inside the app.
 
 ## 最近的 UI / 稳定性改进
 
+- **v0.3.0 / 2026-05-27**
+  - 中文：Tauri app 已成为独立桌面控制台，内置 Rust shim 服务；Start /
+    Restart / Generate / Enable / Disable / Active model / Codex launch 不再
+    调用 Python 项目或 `codex-shim` CLI。新增小米 MiMo provider，默认
+    `base_url` 为 `https://token-plan-cn.xiaomimimo.com/v1`，内置
+    `MiMo-V2.5-Pro` 和 `MiMo-V2.5` 预设。
+  - English: The Tauri app is now a standalone desktop control panel with an
+    embedded Rust shim service. Start / Restart / Generate / Enable / Disable /
+    Active model / Codex launch no longer call the Python project or
+    `codex-shim` CLI. Xiaomi MiMo is supported with the default
+    `https://token-plan-cn.xiaomimimo.com/v1` base URL and built-in
+    `MiMo-V2.5-Pro` / `MiMo-V2.5` presets.
 - **v0.2.0 / 2026-05-27**
   - 中文：Models 表单新增 MiniMax、Kimi/Moonshot、阿里云百炼/DashScope、
     火山方舟 provider；补齐默认 `base_url`、常用模型预设和 Rust 写入校验。

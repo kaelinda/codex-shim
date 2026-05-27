@@ -1,6 +1,6 @@
 [package]
 name = "codex-shim-control"
-version = "0.2.0"
+version = "0.3.0"
 description = "Desktop control panel for the codex-shim daemon."
 authors = ["codex-shim contributors"]
 edition = "2021"

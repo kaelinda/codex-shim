@@ -4,7 +4,8 @@ Run **Codex Desktop** against any BYOK model you can describe in
 `~/.codex-shim/models.json`, plus an optional passthrough to your **ChatGPT
 subscription's Codex model** — without rebuilding Codex.
 
-The shim is a local Python/aiohttp server that exposes an OpenAI
+The shim can run either as the Python/aiohttp CLI daemon or as the standalone
+Tauri desktop app's embedded Rust service. In both modes it exposes an OpenAI
 Responses-compatible endpoint on loopback. Codex points at the shim; the shim
 routes each request to the matching upstream (OpenAI chat completions,
 Anthropic Messages, a generic OpenAI-shaped chat endpoint, or ChatGPT Codex
@@ -65,6 +66,29 @@ local:
 ---
 
 ## Install
+
+### Standalone desktop app
+
+The Tauri app is now self-contained. It embeds the Rust shim service and does
+not require Python or the `codex-shim` CLI for normal GUI use. Use it when you
+want a desktop control panel for starting/stopping the shim, editing
+`~/.codex-shim/models.json`, generating Codex config, switching the active
+model, tailing logs, launching Codex Desktop, or applying the macOS picker
+patch.
+
+Build it from source:
+
+```bash
+cd tauri-app
+npm install
+npm run tauri:build
+```
+
+Release bundles are written to `tauri-app/src-tauri/target/release/bundle/`.
+See [`tauri-app/README.md`](tauri-app/README.md) for GUI-specific notes and
+platform prerequisites.
+
+### Python CLI
 
 Recommended on macOS/Linux/WSL/Git Bash (installs the `codex-shim` entry
 point from `pyproject.toml`):
