@@ -74,5 +74,9 @@ export const PROVIDERS = [
   "anthropic",
   "generic-chat-completion-api",
   "deepseek",
+  "minimax",
+  "moonshot",
+  "dashscope",
+  "volcengine",
 ] as const;
 export type Provider = (typeof PROVIDERS)[number];

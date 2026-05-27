@@ -79,7 +79,7 @@ class ShimServer:
             return await self._chatgpt_passthrough(request, body)
         route = self._route(body)
         if route.is_openai_chat:
-            forwarded = responses_to_chat(body, route.model)
+            forwarded = responses_to_chat(body, route.model, provider=route.provider)
             return await self._post_openai_chat(request, route, forwarded, as_responses=True)
         if route.is_anthropic:
             forwarded = responses_to_anthropic(body, route.model, route.max_output_tokens)
@@ -299,6 +299,8 @@ class ResponsesStreamState:
         reasoning = delta.get("reasoning_content") or delta.get("reasoning")
         if reasoning:
             await self._chat_reasoning_delta(response, reasoning)
+        for reasoning_text in _minimax_reasoning_deltas(delta.get("reasoning_details")):
+            await self._chat_reasoning_delta(response, reasoning_text)
         content = delta.get("content")
         if content:
             await self._text_delta(response, content)
@@ -878,6 +880,19 @@ def _anthropic_stream_to_chat_chunk(event: dict[str, Any], model: str) -> dict[s
         if delta.get("type") == "text_delta":
             content = delta.get("text", "")
     return {"object": "chat.completion.chunk", "model": model, "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}]}
+
+
+def _minimax_reasoning_deltas(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    chunks: list[str] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        text = item.get("text") or item.get("reasoning_content") or item.get("content")
+        if text:
+            chunks.append(str(text))
+    return chunks
 
 
 async def _error_response(upstream) -> web.Response:

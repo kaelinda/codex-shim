@@ -33,7 +33,7 @@ def _decode_thinking_blob(encoded: Any) -> dict[str, Any] | None:
     return data
 
 
-def responses_to_chat(body: dict[str, Any], upstream_model: str) -> dict[str, Any]:
+def responses_to_chat(body: dict[str, Any], upstream_model: str, provider: str = "generic-chat-completion-api") -> dict[str, Any]:
     messages = []
     instructions = body.get("instructions")
     if instructions:
@@ -70,15 +70,17 @@ def responses_to_chat(body: dict[str, Any], upstream_model: str) -> dict[str, An
     _copy_if_present(body, chat, "max_tokens")
     _copy_if_present(body, chat, "parallel_tool_calls")
     # DeepSeek expects "thinking" as a ThinkingOptions object, not a boolean.
-    # Codex sends it as boolean true. Convert or strip.
+    # Other OpenAI-compatible providers often reject unknown `thinking`, so only
+    # forward it to providers with known support or generic opt-in routes.
     thinking_raw = body.get("thinking")
-    if thinking_raw is True:
-        chat["thinking"] = {"type": "enabled"}
-    elif thinking_raw:
-        chat["thinking"] = thinking_raw
-    elif has_reasoning_content:
-        # DeepSeek requires thinking to be enabled when reasoning_content is present.
-        chat["thinking"] = {"type": "enabled"}
+    if _provider_accepts_thinking(provider, upstream_model):
+        if thinking_raw is True:
+            chat["thinking"] = _enabled_thinking_options(provider, upstream_model)
+        elif thinking_raw:
+            chat["thinking"] = thinking_raw
+        elif has_reasoning_content:
+            # DeepSeek requires thinking to be enabled when reasoning_content is present.
+            chat["thinking"] = _enabled_thinking_options(provider, upstream_model)
 
     tools = _responses_tools_to_chat_tools(body.get("tools"))
     if tools:
@@ -243,7 +245,7 @@ def chat_completion_to_response(payload: dict[str, Any], requested_model: str) -
     choice = (payload.get("choices") or [{}])[0]
     message = choice.get("message") or {}
     output: list[dict[str, Any]] = []
-    reasoning_content = message.get("reasoning_content") or message.get("reasoning")
+    reasoning_content = message.get("reasoning_content") or message.get("reasoning") or _minimax_reasoning(message)
     if reasoning_content:
         reasoning_text = str(reasoning_content)
         output.append(
@@ -297,6 +299,34 @@ def anthropic_to_response(payload: dict[str, Any], requested_model: str) -> dict
 
 def strip_think(text: str) -> str:
     return THINK_RE.sub("", text or "")
+
+
+def _minimax_reasoning(message: dict[str, Any]) -> str:
+    details = message.get("reasoning_details")
+    if not isinstance(details, list):
+        return ""
+    chunks: list[str] = []
+    for item in details:
+        if not isinstance(item, dict):
+            continue
+        text = item.get("text") or item.get("reasoning_content") or item.get("content")
+        if text:
+            chunks.append(str(text))
+    return "\n".join(chunks)
+
+
+def _provider_accepts_thinking(provider: str, upstream_model: str) -> bool:
+    if provider in {"deepseek", "generic-chat-completion-api"}:
+        return True
+    if provider == "moonshot" and upstream_model.startswith("kimi-"):
+        return True
+    return False
+
+
+def _enabled_thinking_options(provider: str, upstream_model: str) -> dict[str, Any]:
+    if provider == "moonshot" and upstream_model.startswith("kimi-"):
+        return {"type": "enabled", "keep": "all"}
+    return {"type": "enabled"}
 
 
 def _responses_input_to_messages(value: Any) -> list[dict[str, Any]]:

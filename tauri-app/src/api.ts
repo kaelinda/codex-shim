@@ -120,8 +120,8 @@ function mockData(key: string, args: unknown[]): unknown {
         models: [
           {
             model: "MiniMax-M2.7",
-            provider: "openai",
-            base_url: "https://api.minimax.chat",
+            provider: "minimax",
+            base_url: "https://api.minimax.io/v1",
             display_name: "MiniMax-M2.7",
             api_key: "",
           },

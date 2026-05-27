@@ -292,6 +292,30 @@ Recommended schema:
       "api_key": "…",
       "display_name": "DeepSeek V4 Pro",
       "no_image_support": true
+    },
+    {
+      "model": "MiniMax-M2",
+      "provider": "minimax",
+      "base_url": "https://api.minimax.io/v1",
+      "api_key": "…",
+      "display_name": "MiniMax M2",
+      "no_image_support": true
+    },
+    {
+      "model": "kimi-k2.6",
+      "provider": "moonshot",
+      "base_url": "https://api.moonshot.cn/v1",
+      "api_key": "…",
+      "display_name": "Kimi K2.6",
+      "no_image_support": true
+    },
+    {
+      "model": "qwen-plus",
+      "provider": "dashscope",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key": "…",
+      "display_name": "Qwen Plus",
+      "no_image_support": true
     }
   ]
 }
@@ -312,7 +336,27 @@ Supported `provider` values:
 | `openai` | OpenAI `/v1/chat/completions` |
 | `generic-chat-completion-api` | OpenAI-shaped chat completions |
 | `deepseek` | DeepSeek OpenAI-compatible `/v1/chat/completions` |
+| `minimax` | MiniMax OpenAI-compatible `/v1/chat/completions` |
+| `moonshot` | Moonshot/Kimi OpenAI-compatible `/v1/chat/completions` |
+| `dashscope` | Alibaba Cloud Bailian/DashScope OpenAI-compatible `/compatible-mode/v1/chat/completions` |
+| `volcengine` | Volcengine Ark OpenAI-compatible `/api/v3/chat/completions` |
 | `anthropic` | Anthropic `/v1/messages` |
+
+Provider notes:
+
+- Set `base_url` to the API root, not the final `/chat/completions` path. The
+  shim appends `/chat/completions` or `/messages` itself.
+- MiniMax, Kimi, DeepSeek, Bailian/DashScope, and Volcengine all route through
+  the OpenAI-compatible chat-completions translator.
+- DeepSeek models receive Codex reasoning requests as `thinking:
+  {"type":"enabled"}`. `kimi-*` models receive `thinking:
+  {"type":"enabled","keep":"all"}` so multi-turn Kimi reasoning can be carried
+  forward. Older `moonshot-v1-*` models do not receive `thinking`, because that
+  route is commonly used as a plain chat-completions API.
+- MiniMax `reasoning_details[]` and DeepSeek `reasoning_content` are converted
+  back into Codex `reasoning` output items when the upstream returns them.
+- Use `generic-chat-completion-api` for other compatible providers or for a
+  provider-specific experiment that needs raw `thinking` passthrough.
 
 Useful model fields:
 
@@ -441,6 +485,9 @@ Codex Desktop ── /v1/responses ──▶ codex-shim (127.0.0.1:8765)
                                      │           (Authorization: Bearer <auth.json access_token>)
                                      │
                                      ├── provider "openai" / "generic-…"
+                                     │         / "deepseek" / "minimax"
+                                     │         / "moonshot" / "dashscope"
+                                     │         / "volcengine"
                                      │       └─▶ baseUrl/chat/completions
                                      │           (Authorization: Bearer apiKey)
                                      │
@@ -454,7 +501,8 @@ The shim translates Codex's Responses-API request into the upstream's shape
 Extended-thinking blocks from Anthropic-shaped upstreams (Claude, GLM, etc.)
 round-trip through `reasoning.encrypted_content` items. OpenAI-shaped DeepSeek
 thinking-mode responses preserve `reasoning_content` the same way so tool-call
-follow-up requests can pass it back to DeepSeek.
+follow-up requests can pass it back to DeepSeek. MiniMax `reasoning_details[]`
+is also normalized into Codex reasoning items on the way back.
 
 ---
 

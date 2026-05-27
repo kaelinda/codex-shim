@@ -6,7 +6,7 @@ import pytest
 
 from codex_shim import cli
 from codex_shim.catalog import catalog_entry, write_catalog
-from codex_shim.settings import ModelSettings, chatgpt_passthrough_available
+from codex_shim.settings import ModelSettings, ShimModel, chatgpt_passthrough_available
 
 
 @pytest.fixture
@@ -64,6 +64,24 @@ def test_catalog_preserves_context_and_visibility():
     assert entry["visibility"] == "list"
     assert entry["context_window"] == 200000
     assert "free" in entry["available_in_plans"]
+
+
+def test_first_class_openai_compatible_providers_route_as_chat():
+    settings = ModelSettingsFixture.with_providers(["minimax", "moonshot", "dashscope", "volcengine"])
+    assert [model.provider for model in settings] == ["minimax", "moonshot", "dashscope", "volcengine"]
+    assert all(model.is_openai_chat for model in settings)
+
+
+def test_catalog_reasoning_flags_are_provider_specific():
+    minimax = ShimModel("minimax-m2", "MiniMax-M2", "MiniMax M2", "minimax", "https://api.minimax.io/v1")
+    kimi = ShimModel("kimi", "kimi-k2.6", "Kimi K2.6", "moonshot", "https://api.moonshot.cn/v1")
+    moonshot = ShimModel("moonshot", "moonshot-v1-32k", "Moonshot v1 32K", "moonshot", "https://api.moonshot.cn/v1")
+    dashscope = ShimModel("qwen-plus", "qwen-plus", "Qwen Plus", "dashscope", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+
+    assert catalog_entry(minimax)["supports_reasoning_summaries"] is True
+    assert catalog_entry(dashscope)["supports_reasoning_summaries"] is True
+    assert catalog_entry(kimi)["supports_reasoning_summaries"] is True
+    assert catalog_entry(moonshot)["supports_reasoning_summaries"] is False
 
 
 def test_default_missing_settings_allows_chatgpt_only(monkeypatch, tmp_path):
@@ -171,3 +189,26 @@ class ModelSettingsFixture:
             )
         )
         return ModelSettings(path).load()[0]
+
+    @staticmethod
+    def with_providers(providers: list[str]):
+        import tempfile
+        from pathlib import Path
+
+        path = Path(tempfile.mkdtemp()) / "settings.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "models": [
+                        {
+                            "model": f"{provider}-model",
+                            "display_name": f"{provider} model",
+                            "provider": provider,
+                            "base_url": "http://upstream/v1",
+                        }
+                        for provider in providers
+                    ]
+                }
+            )
+        )
+        return ModelSettings(path).load()

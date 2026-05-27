@@ -96,9 +96,10 @@ pub fn validate(row: &ModelRow) -> AppResult<()> {
         return Err(AppError::msg("base_url 不能为空"));
     }
     match row.provider.as_str() {
-        "openai" | "anthropic" | "generic-chat-completion-api" | "deepseek" => Ok(()),
+        "openai" | "anthropic" | "generic-chat-completion-api" | "deepseek" | "minimax"
+        | "moonshot" | "dashscope" | "volcengine" => Ok(()),
         other => Err(AppError::msg(format!(
-            "未知 provider {other:?}，支持: openai / anthropic / generic-chat-completion-api / deepseek"
+            "未知 provider {other:?}，支持: openai / anthropic / generic-chat-completion-api / deepseek / minimax / moonshot / dashscope / volcengine"
         ))),
     }
 }

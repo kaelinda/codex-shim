@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from codex_shim.translate import chat_completion_to_response, responses_to_anthropic, responses_to_chat
 
 
@@ -71,6 +73,37 @@ def test_chat_completion_to_response_preserves_reasoning_content_for_tool_calls(
     assert [item["type"] for item in out["output"]] == ["reasoning", "message", "function_call"]
     assert out["output"][0]["summary"][0]["text"] == "Need the current date before answering."
     assert out["output"][0]["encrypted_content"].startswith("anthropic-thinking-v1:")
+
+
+def test_chat_completion_to_response_preserves_minimax_reasoning_details():
+    payload = {
+        "id": "chatcmpl_1",
+        "created": 0,
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "Answer",
+                    "reasoning_details": [
+                        {"type": "reasoning.text", "text": "First thought."},
+                        {"type": "reasoning.text", "text": "Second thought."},
+                    ],
+                }
+            }
+        ],
+    }
+
+    out = chat_completion_to_response(payload, "MiniMax-M2")
+
+    assert out["output"][0]["type"] == "reasoning"
+    assert out["output"][0]["summary"][0]["text"] == "First thought.\nSecond thought."
+    assert out["output"][1]["content"][0]["text"] == "Answer"
+    decoded = json.loads(
+        __import__("base64").urlsafe_b64decode(
+            out["output"][0]["encrypted_content"].removeprefix("anthropic-thinking-v1:").encode("ascii")
+        ).decode("utf-8")
+    )
+    assert decoded["thinking"] == "First thought.\nSecond thought."
 
 
 def test_responses_to_chat_replays_reasoning_on_same_assistant_tool_call_message():

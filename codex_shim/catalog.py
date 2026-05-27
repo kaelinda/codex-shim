@@ -7,6 +7,7 @@ from .settings import PROVIDER_NAME, ShimModel, chatgpt_passthrough_available, d
 
 
 PLAN_TIERS = ["free", "plus", "pro", "team", "business", "enterprise"]
+REASONING_PROVIDERS = {"deepseek", "anthropic", "minimax", "dashscope", "volcengine"}
 
 
 def catalog_entry(model: ShimModel) -> dict:
@@ -14,10 +15,8 @@ def catalog_entry(model: ShimModel) -> dict:
     compact = max(8_000, int(context * 0.8))
     truncation = min(64_000, max(8_000, int(context * 0.32)))
     reasoning = _reasoning_effort(model)
-    # Providers that return reasoning/thinking content which must be preserved
-    # across turns (DeepSeek requires reasoning_content be passed back).
-    _reasoning_providers = {"deepseek", "anthropic", "minimax", "moonshot", "dashscope", "volcengine"}
-    _supports_reasoning = model.provider in _reasoning_providers
+    # Providers that expose reasoning/thinking in their public API.
+    _supports_reasoning = _supports_reasoning_summaries(model)
     return {
         "slug": model.slug,
         "display_name": model.display_name,
@@ -173,6 +172,14 @@ def _default_context(model: ShimModel) -> int:
     return 128_000
 
 
+def _supports_reasoning_summaries(model: ShimModel) -> bool:
+    if model.provider in REASONING_PROVIDERS:
+        return True
+    if model.provider == "moonshot":
+        return model.model.startswith("kimi-")
+    return False
+
+
 def _reasoning_effort(model: ShimModel) -> str:
     lower = model.display_name.lower()
     if "xhigh" in lower or "x-high" in lower:
@@ -188,4 +195,3 @@ def _reasoning_effort(model: ShimModel) -> str:
 
 def _toml_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
-

@@ -12,6 +12,16 @@ DEFAULT_CODEX_AUTH = Path.home() / ".codex" / "auth.json"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 PROVIDER_NAME = "codex_shim"
+OPENAI_CHAT_PROVIDERS = {
+    "openai",
+    "generic-chat-completion-api",
+    "deepseek",
+    "minimax",
+    "moonshot",
+    "dashscope",
+    "volcengine",
+}
+SUPPORTED_PROVIDERS = OPENAI_CHAT_PROVIDERS | {"anthropic"}
 
 
 def chatgpt_passthrough_available(auth_path: Path | None = None) -> bool:
@@ -59,7 +69,7 @@ class ShimModel:
 
     @property
     def is_openai_chat(self) -> bool:
-        return self.provider in {"openai", "generic-chat-completion-api", "deepseek", "minimax", "moonshot", "dashscope", "volcengine"}
+        return self.provider in OPENAI_CHAT_PROVIDERS
 
 
 class ModelSettings:

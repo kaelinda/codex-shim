@@ -8,6 +8,8 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from codex_shim.server import ShimServer
 
+pytestmark = pytest.mark.asyncio
+
 
 @pytest.fixture
 def auth_present(monkeypatch, tmp_path):
@@ -150,6 +152,54 @@ async def test_deepseek_replays_reasoning_content_on_tool_followup(tmp_path):
         ],
         "reasoning_content": "Need the current date before answering.",
     }
+
+    await shim_client.close()
+    await upstream_client.close()
+
+
+async def test_moonshot_legacy_model_does_not_forward_codex_thinking(tmp_path):
+    captured = {}
+
+    async def chat(request):
+        captured["body"] = await request.json()
+        return web.json_response(
+            {
+                "id": "chatcmpl_fake",
+                "choices": [{"message": {"role": "assistant", "content": "done"}}],
+            }
+        )
+
+    upstream = web.Application()
+    upstream.router.add_post("/v1/chat/completions", chat)
+    upstream_client = TestClient(TestServer(upstream))
+    await upstream_client.start_server()
+
+    settings = tmp_path / "settings.json"
+    settings.write_text(
+        json.dumps(
+            {
+                "models": [
+                    {
+                        "model": "moonshot-v1-32k",
+                        "display_name": "Moonshot v1 32K",
+                        "provider": "moonshot",
+                        "base_url": str(upstream_client.make_url("/v1")),
+                        "api_key": "secret",
+                    }
+                ]
+            }
+        )
+    )
+    shim_client = TestClient(TestServer(ShimServer(settings).app()))
+    await shim_client.start_server()
+
+    resp = await shim_client.post(
+        "/v1/responses",
+        json={"model": "moonshot-v1-32k", "input": "hi", "thinking": True},
+    )
+
+    assert resp.status == 200
+    assert "thinking" not in captured["body"]
 
     await shim_client.close()
     await upstream_client.close()

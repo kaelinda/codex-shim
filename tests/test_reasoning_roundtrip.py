@@ -141,6 +141,48 @@ def test_thinking_disabled_but_reasoning_present():
     assert "reasoning_content" in result["messages"][0]
 
 
+def test_moonshot_legacy_model_drops_thinking_option():
+    result = responses_to_chat(
+        {
+            "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Hi"}]}],
+            "thinking": True,
+            "stream": True,
+        },
+        upstream_model="moonshot-v1-32k",
+        provider="moonshot",
+    )
+
+    assert "thinking" not in result
+
+
+def test_kimi_model_keeps_thinking_option():
+    result = responses_to_chat(
+        {
+            "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Hi"}]}],
+            "thinking": True,
+            "stream": True,
+        },
+        upstream_model="kimi-k2.6",
+        provider="moonshot",
+    )
+
+    assert result["thinking"] == {"type": "enabled", "keep": "all"}
+
+
+def test_generic_chat_provider_can_opt_into_thinking_passthrough():
+    result = responses_to_chat(
+        {
+            "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Hi"}]}],
+            "thinking": {"type": "enabled"},
+            "stream": True,
+        },
+        upstream_model="reasoning-model",
+        provider="generic-chat-completion-api",
+    )
+
+    assert result["thinking"] == {"type": "enabled"}
+
+
 def test_encrypted_content_preserved_in_reasoning_only():
     """The _reasoning_only message should carry encrypted_content for the Anthropic path."""
     from codex_shim.translate import _responses_input_to_messages

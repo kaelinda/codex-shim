@@ -12,6 +12,10 @@ const BASE_URL_DEFAULTS: Record<Provider, string> = {
   anthropic: "https://api.anthropic.com/v1",
   "generic-chat-completion-api": "",
   deepseek: "https://api.deepseek.com",
+  minimax: "https://api.minimax.io/v1",
+  moonshot: "https://api.moonshot.cn/v1",
+  dashscope: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  volcengine: "https://ark.cn-beijing.volces.com/api/v3",
 };
 
 // Popular model presets per provider
@@ -29,9 +33,36 @@ const MODEL_PRESETS: Record<Provider, { model: string; display: string }[]> = {
     { model: "claude-3-5-haiku-20241022", display: "Claude 3.5 Haiku" },
   ],
   deepseek: [
-    { model: "deepseek-chat", display: "DeepSeek Chat" },
     { model: "deepseek-v4-pro", display: "DeepSeek V4 Pro" },
-    { model: "deepseek-coder", display: "DeepSeek Coder" },
+    { model: "deepseek-v4-flash", display: "DeepSeek V4 Flash" },
+    { model: "deepseek-chat", display: "DeepSeek Chat (legacy)" },
+    { model: "deepseek-reasoner", display: "DeepSeek Reasoner (legacy)" },
+  ],
+  minimax: [
+    { model: "MiniMax-M2", display: "MiniMax M2" },
+    { model: "MiniMax-M2.7", display: "MiniMax M2.7" },
+  ],
+  moonshot: [
+    { model: "kimi-k2.6", display: "Kimi K2.6" },
+    { model: "kimi-k2.5", display: "Kimi K2.5" },
+    { model: "kimi-k2-thinking", display: "Kimi K2 Thinking" },
+    { model: "kimi-k2-thinking-turbo", display: "Kimi K2 Thinking Turbo" },
+    { model: "kimi-k2-0905-preview", display: "Kimi K2 0905 Preview" },
+    { model: "kimi-k2-0711-preview", display: "Kimi K2 0711 Preview" },
+    { model: "moonshot-v1-8k", display: "Moonshot v1 8K" },
+    { model: "moonshot-v1-32k", display: "Moonshot v1 32K" },
+    { model: "moonshot-v1-128k", display: "Moonshot v1 128K" },
+  ],
+  dashscope: [
+    { model: "qwen3.6-plus", display: "Qwen3.6 Plus" },
+    { model: "qwen-plus", display: "Qwen Plus" },
+    { model: "deepseek-v4-pro", display: "DeepSeek V4 Pro on Bailian" },
+    { model: "qwen3-coder-plus", display: "Qwen3 Coder Plus" },
+  ],
+  volcengine: [
+    { model: "doubao-seed-1-6", display: "Doubao Seed 1.6" },
+    { model: "deepseek-v3", display: "DeepSeek V3 on Ark" },
+    { model: "deepseek-r1", display: "DeepSeek R1 on Ark" },
   ],
   "generic-chat-completion-api": [],
 };
