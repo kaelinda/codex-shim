@@ -28,3 +28,7 @@ dist/
 
 # MCP / tool artifacts
 .playwright-mcp/
+
+# Rust
+target/
+cli/target/

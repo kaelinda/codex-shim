@@ -67,6 +67,55 @@ local:
 
 ## Install
 
+### Lightweight Rust CLI
+
+Use this when you want the local shim and API-key setup without installing the
+desktop app or the Python package:
+
+```bash
+git clone https://github.com/0xSero/codex-shim ~/codex-shim
+cd ~/codex-shim
+./start.sh
+```
+
+Lazy install without keeping a checkout first:
+
+```bash
+tmp="$(mktemp)" && \
+  curl -fsSL https://raw.githubusercontent.com/0xSero/codex-shim/main/start.sh -o "$tmp" && \
+  bash "$tmp"
+```
+
+Until the Rust CLI branch is merged, point the script at this branch explicitly:
+
+```bash
+tmp="$(mktemp)" && \
+  curl -fsSL https://raw.githubusercontent.com/0xSero/codex-shim/feature/cli/start.sh -o "$tmp" && \
+  CODEX_SHIM_REF=feature/cli bash "$tmp"
+```
+
+`start.sh` builds the standalone Rust binary from `cli/`, installs
+`codex-shim-cli` to `~/.local/bin`, offers an interactive API-key/model setup
+when `~/.codex-shim/models.json` is missing, and starts the local shim on
+`127.0.0.1:8765`. Override defaults with `CODEX_SHIM_INSTALL_DIR`,
+`CODEX_SHIM_SETTINGS`, `CODEX_SHIM_PORT`, `CODEX_SHIM_REPO`,
+`CODEX_SHIM_REF`, or `CODEX_SHIM_SOURCE_DIR`.
+
+Useful commands:
+
+```bash
+codex-shim-cli configure      # add a BYOK model/API key
+codex-shim-cli start          # start the Rust shim daemon
+codex-shim-cli enable         # start and write the managed ~/.codex/config.toml block
+codex-shim-cli list           # show model slugs
+codex-shim-cli model use gpt-5.5
+codex-shim-cli stop
+```
+
+Rust CLI runtime files live under `~/.codex-shim/cli/`. API keys stay only in
+`~/.codex-shim/models.json`; generated catalog/config files do not contain
+them.
+
 ### Standalone desktop app
 
 The Tauri app is now self-contained. It embeds the Rust shim service and does
