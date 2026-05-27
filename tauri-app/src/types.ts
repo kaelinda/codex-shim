@@ -66,10 +66,11 @@ export interface AuthSnapshot {
 
 export type TabKey = "dashboard" | "models" | "active" | "logs" | "settings";
 
-export const PROVIDERS = [
+export const BUILT_IN_PROVIDERS = [
   "openai",
   "anthropic",
   "generic-chat-completion-api",
+  "new-api",
   "deepseek",
   "mimo",
   "minimax",
@@ -77,4 +78,4 @@ export const PROVIDERS = [
   "dashscope",
   "volcengine",
 ] as const;
-export type Provider = (typeof PROVIDERS)[number];
+export type BuiltInProvider = (typeof BUILT_IN_PROVIDERS)[number];

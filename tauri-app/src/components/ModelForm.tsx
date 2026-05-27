@@ -1,16 +1,17 @@
 import { useId, useMemo } from "react";
-import { PROVIDERS } from "../types";
-import type { ModelRow, Provider } from "../types";
+import { BUILT_IN_PROVIDERS } from "../types";
+import type { BuiltInProvider, ModelRow } from "../types";
 
 interface Props {
   value: ModelRow;
   onChange: (next: ModelRow) => void;
 }
 
-const BASE_URL_DEFAULTS: Record<Provider, string> = {
+const BASE_URL_DEFAULTS: Record<BuiltInProvider, string> = {
   openai: "https://api.openai.com/v1",
   anthropic: "https://api.anthropic.com/v1",
   "generic-chat-completion-api": "",
+  "new-api": "",
   deepseek: "https://api.deepseek.com",
   mimo: "https://token-plan-cn.xiaomimimo.com/v1",
   minimax: "https://api.minimax.io/v1",
@@ -20,7 +21,7 @@ const BASE_URL_DEFAULTS: Record<Provider, string> = {
 };
 
 // Popular model presets per provider
-const MODEL_PRESETS: Record<Provider, { model: string; display: string }[]> = {
+const MODEL_PRESETS: Record<BuiltInProvider, { model: string; display: string }[]> = {
   openai: [
     { model: "gpt-4o", display: "GPT-4o" },
     { model: "gpt-4o-mini", display: "GPT-4o mini" },
@@ -70,6 +71,7 @@ const MODEL_PRESETS: Record<Provider, { model: string; display: string }[]> = {
     { model: "deepseek-r1", display: "DeepSeek R1 on Ark" },
   ],
   "generic-chat-completion-api": [],
+  "new-api": [],
 };
 
 export default function ModelForm({ value, onChange }: Props) {
@@ -96,7 +98,8 @@ export default function ModelForm({ value, onChange }: Props) {
     }
   }, [value.extra_headers]);
 
-  const presets = MODEL_PRESETS[value.provider as Provider] || [];
+  const providerKey = asBuiltInProvider(value.provider);
+  const presets = providerKey ? MODEL_PRESETS[providerKey] : [];
 
   const patch = (delta: Partial<ModelRow>) => onChange({ ...value, ...delta });
 
@@ -144,22 +147,31 @@ export default function ModelForm({ value, onChange }: Props) {
         </div>
       </Field>
 
-      <Field id={ids.provider} label="provider *">
-        <select
+      <Field
+        id={ids.provider}
+        label="provider *"
+        hint="可直接输入自定义 provider；除 anthropic 外都会按 OpenAI-compatible /chat/completions 路由，例如 new-api。"
+      >
+        <input
           id={ids.provider}
+          list={`${ids.provider}-options`}
           value={value.provider}
           onChange={(e) => {
-            const next = e.target.value as Provider;
+            const next = e.target.value.trim();
+            const builtIn = asBuiltInProvider(next);
             patch({
               provider: next,
-              base_url: value.base_url || BASE_URL_DEFAULTS[next] || value.base_url,
+              base_url: value.base_url || (builtIn ? BASE_URL_DEFAULTS[builtIn] : "") || value.base_url,
             });
           }}
-        >
-          {PROVIDERS.map((p) => (
+          required
+          aria-describedby={`${ids.provider}-hint`}
+        />
+        <datalist id={`${ids.provider}-options`}>
+          {BUILT_IN_PROVIDERS.map((p) => (
             <option key={p} value={p}>{p}</option>
           ))}
-        </select>
+        </datalist>
       </Field>
 
       <Field id={ids.baseUrl} label="base_url *" hint="不要带尾部 /chat/completions 之类">
@@ -168,7 +180,7 @@ export default function ModelForm({ value, onChange }: Props) {
           type="text"
           value={value.base_url}
           onChange={(e) => patch({ base_url: e.target.value })}
-          placeholder={BASE_URL_DEFAULTS[value.provider as Provider] || "https://..."}
+          placeholder={(providerKey ? BASE_URL_DEFAULTS[providerKey] : "") || "https://..."}
           required
           aria-describedby={`${ids.baseUrl}-hint`}
         />
@@ -249,6 +261,12 @@ export default function ModelForm({ value, onChange }: Props) {
       </Field>
     </div>
   );
+}
+
+function asBuiltInProvider(provider: string): BuiltInProvider | null {
+  return BUILT_IN_PROVIDERS.includes(provider as BuiltInProvider)
+    ? (provider as BuiltInProvider)
+    : null;
 }
 
 function Field({

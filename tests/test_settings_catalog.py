@@ -72,6 +72,12 @@ def test_first_class_openai_compatible_providers_route_as_chat():
     assert all(model.is_openai_chat for model in settings)
 
 
+def test_custom_provider_routes_as_openai_compatible_chat():
+    settings = ModelSettingsFixture.with_providers(["new-api", "my-openai-proxy"])
+    assert [model.provider for model in settings] == ["new-api", "my-openai-proxy"]
+    assert all(model.is_openai_chat for model in settings)
+
+
 def test_catalog_reasoning_flags_are_provider_specific():
     minimax = ShimModel("minimax-m2", "MiniMax-M2", "MiniMax M2", "minimax", "https://api.minimax.io/v1")
     kimi = ShimModel("kimi", "kimi-k2.6", "Kimi K2.6", "moonshot", "https://api.moonshot.cn/v1")

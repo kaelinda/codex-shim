@@ -209,11 +209,21 @@ pub fn validate(row: &ModelRow) -> AppResult<()> {
     if row.base_url.trim().is_empty() {
         return Err(AppError::msg("base_url 不能为空"));
     }
-    match row.provider.as_str() {
-        "openai" | "anthropic" | "generic-chat-completion-api" | "deepseek" | "mimo" | "minimax"
-        | "moonshot" | "dashscope" | "volcengine" => Ok(()),
-        other => Err(AppError::msg(format!(
-            "未知 provider {other:?}，支持: openai / anthropic / generic-chat-completion-api / deepseek / mimo / minimax / moonshot / dashscope / volcengine"
-        ))),
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_accepts_custom_openai_compatible_provider() {
+        let row = ModelRow {
+            model: "gpt-4.1".to_string(),
+            provider: "new-api".to_string(),
+            base_url: "https://new-api.example.com/v1".to_string(),
+            ..Default::default()
+        };
+        assert!(validate(&row).is_ok());
     }
 }

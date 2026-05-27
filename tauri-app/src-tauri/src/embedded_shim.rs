@@ -1914,17 +1914,7 @@ fn enabled_thinking_options(provider: &str, model: &str) -> Value {
 }
 
 fn is_openai_chat(provider: &str) -> bool {
-    matches!(
-        provider,
-        "openai"
-            | "generic-chat-completion-api"
-            | "deepseek"
-            | "mimo"
-            | "minimax"
-            | "moonshot"
-            | "dashscope"
-            | "volcengine"
-    )
+    provider != "anthropic"
 }
 
 fn join_url(base_url: &str, endpoint: &str) -> String {
@@ -2055,6 +2045,26 @@ mod tests {
         );
         assert!(out.get("thinking").is_none());
         assert_eq!(out["stream"], Value::Bool(true));
+    }
+
+    #[test]
+    fn custom_provider_routes_as_openai_chat_without_thinking_passthrough() {
+        let route = RouteModel {
+            slug: "new-api-gpt-4-1".to_string(),
+            model: "gpt-4.1".to_string(),
+            provider: "new-api".to_string(),
+            base_url: "https://new-api.example.com/v1".to_string(),
+            api_key: String::new(),
+            max_output_tokens: None,
+            extra_headers: HashMap::new(),
+        };
+        assert!(is_openai_chat(&route.provider));
+        let out = responses_to_chat(
+            &json!({"input": "hi", "thinking": true, "stream": true}),
+            &route,
+        );
+        assert!(out.get("thinking").is_none());
+        assert_eq!(out["model"], Value::String("gpt-4.1".to_string()));
     }
 
     #[test]

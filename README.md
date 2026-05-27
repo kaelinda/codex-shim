@@ -303,6 +303,13 @@ Recommended schema:
       "max_context_limit": 400000
     },
     {
+      "model": "gpt-4.1",
+      "provider": "new-api",
+      "base_url": "https://new-api.example.com/v1",
+      "api_key": "…",
+      "display_name": "GPT-4.1 via New API"
+    },
+    {
       "model": "claude-opus-4-7-20251109",
       "provider": "anthropic",
       "base_url": "https://api.anthropic.com/v1",
@@ -361,12 +368,13 @@ used directly.
 The shim **never copies your API keys** into the generated catalog. Keys stay
 in your settings file and are read fresh on every request.
 
-Supported `provider` values:
+Built-in `provider` suggestions:
 
 | provider | upstream API |
 |---|---|
 | `openai` | OpenAI `/v1/chat/completions` |
 | `generic-chat-completion-api` | OpenAI-shaped chat completions |
+| `new-api` | Custom New API / One API style OpenAI-compatible `/v1/chat/completions` |
 | `deepseek` | DeepSeek OpenAI-compatible `/v1/chat/completions` |
 | `mimo` | Xiaomi MiMo OpenAI-compatible `/v1/chat/completions` |
 | `minimax` | MiniMax OpenAI-compatible `/v1/chat/completions` |
@@ -377,10 +385,14 @@ Supported `provider` values:
 
 Provider notes:
 
+- `provider` is open-ended. Any value except `anthropic` is treated as an
+  OpenAI-compatible chat-completions provider, so self-hosted gateways such as
+  New API / One API can use names like `new-api`, `one-api`, or an internal
+  provider label.
 - Set `base_url` to the API root, not the final `/chat/completions` path. The
   shim appends `/chat/completions` or `/messages` itself.
-- MiMo, MiniMax, Kimi, DeepSeek, Bailian/DashScope, and Volcengine all route
-  through the OpenAI-compatible chat-completions translator.
+- MiMo, MiniMax, Kimi, DeepSeek, Bailian/DashScope, Volcengine, and custom
+  providers all route through the OpenAI-compatible chat-completions translator.
 - DeepSeek models receive Codex reasoning requests as `thinking:
   {"type":"enabled"}`. `kimi-*` models receive `thinking:
   {"type":"enabled","keep":"all"}` so multi-turn Kimi reasoning can be carried
@@ -521,6 +533,7 @@ Codex Desktop ── /v1/responses ──▶ codex-shim (127.0.0.1:8765)
                                      │         / "deepseek" / "mimo"
                                      │         / "minimax" / "moonshot"
                                      │         / "dashscope" / "volcengine"
+                                     │         / any custom provider
                                      │       └─▶ baseUrl/chat/completions
                                      │           (Authorization: Bearer apiKey)
                                      │

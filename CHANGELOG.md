@@ -7,6 +7,12 @@ and this project does not yet follow semantic versioning (pre-1.0).
 
 ## Unreleased
 
+### Added
+
+- Allow custom OpenAI-compatible provider names such as `new-api` in both the
+  Python shim and Tauri app. Any provider except `anthropic` now routes through
+  `/chat/completions`.
+
 ## 0.3.0 — 2026-05-27
 
 ### 中文

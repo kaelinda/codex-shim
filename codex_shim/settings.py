@@ -12,6 +12,8 @@ DEFAULT_CODEX_AUTH = Path.home() / ".codex" / "auth.json"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 PROVIDER_NAME = "codex_shim"
+# Built-in provider suggestions. This is not an allowlist: any provider except
+# `anthropic` is treated as OpenAI-compatible chat completions at runtime.
 OPENAI_CHAT_PROVIDERS = {
     "openai",
     "generic-chat-completion-api",
@@ -70,7 +72,7 @@ class ShimModel:
 
     @property
     def is_openai_chat(self) -> bool:
-        return self.provider in OPENAI_CHAT_PROVIDERS
+        return self.provider != "anthropic"
 
 
 class ModelSettings:
