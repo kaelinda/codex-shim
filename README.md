@@ -81,23 +81,17 @@ cd ~/codex-shim
 Lazy install without keeping a checkout first:
 
 ```bash
-tmp="$(mktemp)" && \
-  curl -fsSL https://raw.githubusercontent.com/0xSero/codex-shim/main/start.sh -o "$tmp" && \
-  bash "$tmp"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/kaelinda/codex-shim/feature/cli/start.sh)"
 ```
 
-Until the Rust CLI branch is merged, point the script at this branch explicitly:
-
-```bash
-tmp="$(mktemp)" && \
-  curl -fsSL https://raw.githubusercontent.com/0xSero/codex-shim/feature/cli/start.sh -o "$tmp" && \
-  CODEX_SHIM_REF=feature/cli bash "$tmp"
-```
+Open the script in a browser:
+https://github.com/kaelinda/codex-shim/blob/feature/cli/start.sh
 
 `start.sh` builds the standalone Rust binary from `cli/`, installs
 `codex-shim-cli` to `~/.local/bin`, offers an interactive API-key/model setup
-when `~/.codex-shim/models.json` is missing, and starts the local shim on
-`127.0.0.1:8765`. Override defaults with `CODEX_SHIM_INSTALL_DIR`,
+when `~/.codex-shim/models.json` is missing, shows provider/base URL presets,
+and starts the local shim on `127.0.0.1:8765`. Override defaults with
+`CODEX_SHIM_INSTALL_DIR`,
 `CODEX_SHIM_SETTINGS`, `CODEX_SHIM_PORT`, `CODEX_SHIM_REPO`,
 `CODEX_SHIM_REF`, or `CODEX_SHIM_SOURCE_DIR`.
 

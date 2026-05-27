@@ -540,9 +540,10 @@ async fn configure(settings_path: &Path) -> AppResult<()> {
     }
     println!("Configure a BYOK model in {}", settings_path.display());
     println!("Press Enter to accept defaults in brackets.");
+    println!();
+    print_provider_menu();
 
-    let default_provider = "openai";
-    let provider = prompt_default("provider", default_provider)?;
+    let provider = prompt_provider()?;
     let default_base_url = match provider.as_str() {
         "anthropic" => "https://api.anthropic.com/v1",
         "deepseek" => "https://api.deepseek.com",
@@ -576,6 +577,34 @@ async fn configure(settings_path: &Path) -> AppResult<()> {
     println!("Saved model config to {}.", settings_path.display());
     println!("API keys stay in this settings file and are not copied into generated Codex catalog/config.");
     Ok(())
+}
+
+fn print_provider_menu() {
+    println!(
+        "Providers:\n\
+  1) openai      https://api.openai.com/v1\n\
+  2) anthropic  https://api.anthropic.com/v1\n\
+  3) deepseek   https://api.deepseek.com\n\
+  4) moonshot   https://api.moonshot.cn/v1\n\
+  5) dashscope  https://dashscope.aliyuncs.com/compatible-mode/v1\n\
+  6) volcengine https://ark.cn-beijing.volces.com/api/v3\n\
+  7) custom     OpenAI-compatible chat-completions gateway"
+    );
+}
+
+fn prompt_provider() -> AppResult<String> {
+    let value = prompt_default("provider name or number", "1")?;
+    let provider = match value.trim() {
+        "1" | "openai" => "openai",
+        "2" | "anthropic" => "anthropic",
+        "3" | "deepseek" => "deepseek",
+        "4" | "moonshot" => "moonshot",
+        "5" | "dashscope" => "dashscope",
+        "6" | "volcengine" => "volcengine",
+        "7" | "custom" => "generic-chat-completion-api",
+        other => other,
+    };
+    Ok(provider.to_string())
 }
 
 fn prompt_required(label: &str) -> AppResult<String> {

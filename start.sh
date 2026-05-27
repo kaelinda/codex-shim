@@ -12,8 +12,56 @@ TARGET_BIN="$CLI_DIR/target/release/$BIN_NAME"
 INSTALLED_BIN="$INSTALL_DIR/$BIN_NAME"
 PORT="${CODEX_SHIM_PORT:-8765}"
 
+print_env_help() {
+  cat <<'EOF'
+codex-shim CLI environment:
+  required: git, cargo/rustc
+  install Rust:
+    macOS/Linux: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  install Git:
+    macOS: xcode-select --install
+    Debian/Ubuntu: sudo apt-get update && sudo apt-get install -y git
+    Fedora: sudo dnf install -y git
+EOF
+}
+
+print_provider_help() {
+  cat <<'EOF'
+Provider quick reference:
+  openai      base_url: https://api.openai.com/v1
+  anthropic  base_url: https://api.anthropic.com/v1
+  deepseek   base_url: https://api.deepseek.com
+  moonshot   base_url: https://api.moonshot.cn/v1
+  dashscope  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  volcengine base_url: https://ark.cn-beijing.volces.com/api/v3
+  custom     any OpenAI-compatible /v1 chat-completions gateway
+EOF
+}
+
+echo "== codex-shim lightweight CLI installer =="
+echo
+print_env_help
+echo
+echo "Detected environment:"
+if command -v git >/dev/null 2>&1; then
+  echo "  git:   $(git --version)"
+else
+  echo "  git:   missing"
+fi
+if command -v cargo >/dev/null 2>&1; then
+  echo "  cargo: $(cargo --version)"
+else
+  echo "  cargo: missing"
+fi
+if command -v rustc >/dev/null 2>&1; then
+  echo "  rustc: $(rustc --version)"
+else
+  echo "  rustc: missing"
+fi
+echo
+
 if ! command -v cargo >/dev/null 2>&1; then
-  echo "cargo is required to build the Rust CLI. Install Rust from https://rustup.rs/ first." >&2
+  echo "cargo is required to build the Rust CLI. Install Rust, restart your shell, then rerun this script." >&2
   exit 1
 fi
 
@@ -75,6 +123,8 @@ if [ ! -s "$SETTINGS_PATH" ]; then
   if [ -t 0 ]; then
     echo
     echo "No model config found at $SETTINGS_PATH."
+    print_provider_help
+    echo
     read -r -p "Configure an API key now? [Y/n] " answer
     case "${answer:-Y}" in
       [Yy]*)
