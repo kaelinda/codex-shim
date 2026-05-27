@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_PATH="${BASH_SOURCE[0]:-}"
+if [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ]; then
+  ROOT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+else
+  ROOT_DIR="$(pwd)"
+fi
 CLI_DIR="$ROOT_DIR/cli"
-REPO_URL="${CODEX_SHIM_REPO:-https://github.com/0xSero/codex-shim.git}"
-REPO_REF="${CODEX_SHIM_REF:-main}"
+REPO_URL="${CODEX_SHIM_REPO:-https://github.com/kaelinda/codex-shim.git}"
+REPO_REF="${CODEX_SHIM_REF:-feature/cli}"
 SOURCE_DIR="${CODEX_SHIM_SOURCE_DIR:-$HOME/.codex-shim/source}"
 INSTALL_DIR="${CODEX_SHIM_INSTALL_DIR:-$HOME/.local/bin}"
 BIN_NAME="codex-shim-cli"
@@ -14,11 +19,11 @@ PORT="${CODEX_SHIM_PORT:-8765}"
 
 print_env_help() {
   cat <<'EOF'
-codex-shim CLI environment:
-  required: git, cargo/rustc
-  install Rust:
+codex-shim CLI 环境要求：
+  必需工具：git、cargo/rustc
+  安装 Rust：
     macOS/Linux: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-  install Git:
+  安装 Git：
     macOS: xcode-select --install
     Debian/Ubuntu: sudo apt-get update && sudo apt-get install -y git
     Fedora: sudo dnf install -y git
@@ -27,61 +32,65 @@ EOF
 
 print_provider_help() {
   cat <<'EOF'
-Provider quick reference:
+Provider 快速参考：
   openai      base_url: https://api.openai.com/v1
   anthropic  base_url: https://api.anthropic.com/v1
   deepseek   base_url: https://api.deepseek.com
   moonshot   base_url: https://api.moonshot.cn/v1
   dashscope  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   volcengine base_url: https://ark.cn-beijing.volces.com/api/v3
-  custom     any OpenAI-compatible /v1 chat-completions gateway
+  custom     任意兼容 OpenAI /v1 chat-completions 的网关
 EOF
 }
 
-echo "== codex-shim lightweight CLI installer =="
+echo "== codex-shim 轻量 CLI 安装器 =="
 echo
 print_env_help
 echo
-echo "Detected environment:"
+echo "当前环境检测："
 if command -v git >/dev/null 2>&1; then
   echo "  git:   $(git --version)"
 else
-  echo "  git:   missing"
+  echo "  git:   未安装"
 fi
 if command -v cargo >/dev/null 2>&1; then
   echo "  cargo: $(cargo --version)"
 else
-  echo "  cargo: missing"
+  echo "  cargo: 未安装"
 fi
 if command -v rustc >/dev/null 2>&1; then
   echo "  rustc: $(rustc --version)"
 else
-  echo "  rustc: missing"
+  echo "  rustc: 未安装"
 fi
 echo
 
 if ! command -v cargo >/dev/null 2>&1; then
-  echo "cargo is required to build the Rust CLI. Install Rust, restart your shell, then rerun this script." >&2
+  echo "缺少 cargo，无法构建 Rust CLI。请先安装 Rust，重启终端后重新运行本脚本。" >&2
   exit 1
 fi
 
 if [ ! -f "$CLI_DIR/Cargo.toml" ]; then
   if ! command -v git >/dev/null 2>&1; then
-    echo "git is required when start.sh is downloaded without the full repository." >&2
+    echo "当前是单独下载 start.sh 的安装方式，需要 git 拉取源码。请先安装 git。" >&2
     exit 1
   fi
 
   if [ -f "$SOURCE_DIR/cli/Cargo.toml" ]; then
+    echo "检测到已有源码目录：$SOURCE_DIR"
     ROOT_DIR="$SOURCE_DIR"
     CLI_DIR="$ROOT_DIR/cli"
   else
-    echo "No local cli/ checkout found. Downloading codex-shim source..."
+    echo "未在脚本目录找到 cli/ 源码，准备下载 codex-shim 源码。"
+    echo "源码仓库：$REPO_URL"
+    echo "源码分支：$REPO_REF"
+    echo "保存目录：$SOURCE_DIR"
     TMP_SOURCE="$SOURCE_DIR.tmp.$$"
     rm -rf "$TMP_SOURCE"
     mkdir -p "$(dirname "$SOURCE_DIR")"
     if ! git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$TMP_SOURCE"; then
       if [ "$REPO_REF" != "feature/cli" ]; then
-        echo "Retrying with feature/cli..."
+        echo "下载指定分支失败，改用 feature/cli 重试。"
         rm -rf "$TMP_SOURCE"
         git clone --depth 1 --branch "feature/cli" "$REPO_URL" "$TMP_SOURCE"
       else
@@ -89,7 +98,7 @@ if [ ! -f "$CLI_DIR/Cargo.toml" ]; then
       fi
     fi
     if [ ! -f "$TMP_SOURCE/cli/Cargo.toml" ]; then
-      echo "Downloaded source does not contain cli/Cargo.toml. Set CODEX_SHIM_REF to a branch or tag with the Rust CLI." >&2
+      echo "下载的源码中没有 cli/Cargo.toml。请将 CODEX_SHIM_REF 设置为包含 Rust CLI 的分支或 tag。" >&2
       rm -rf "$TMP_SOURCE"
       exit 1
     fi
@@ -102,18 +111,18 @@ fi
 
 TARGET_BIN="$CLI_DIR/target/release/$BIN_NAME"
 
-echo "Building $BIN_NAME..."
+echo "开始构建 $BIN_NAME..."
 cargo build --manifest-path "$CLI_DIR/Cargo.toml" --release
 
 mkdir -p "$INSTALL_DIR"
 cp "$TARGET_BIN" "$INSTALLED_BIN"
 chmod +x "$INSTALLED_BIN"
 
-echo "Installed $BIN_NAME to $INSTALLED_BIN"
+echo "已安装 $BIN_NAME 到：$INSTALLED_BIN"
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
   *)
-    echo "Note: $INSTALL_DIR is not on PATH. Add this to your shell profile:"
+    echo "提示：$INSTALL_DIR 当前不在 PATH 中。可以把下面这行加入你的 shell 配置："
     echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
     ;;
 esac
@@ -122,28 +131,29 @@ SETTINGS_PATH="${CODEX_SHIM_SETTINGS:-$HOME/.codex-shim/models.json}"
 if [ ! -s "$SETTINGS_PATH" ]; then
   if [ -t 0 ]; then
     echo
-    echo "No model config found at $SETTINGS_PATH."
+    echo "未找到模型配置文件：$SETTINGS_PATH"
+    echo "接下来可以按提示填写 provider、base_url、model 和 API Key。"
     print_provider_help
     echo
-    read -r -p "Configure an API key now? [Y/n] " answer
+    read -r -p "现在开始配置 API Key 吗？[Y/n] " answer
     case "${answer:-Y}" in
       [Yy]*)
         "$INSTALLED_BIN" --settings "$SETTINGS_PATH" configure
         ;;
       *)
-        echo "Skipped model configuration. Run '$BIN_NAME configure' later."
+        echo "已跳过模型配置。稍后可运行 '$BIN_NAME configure' 继续配置。"
         ;;
     esac
   else
-    echo "No model config found at $SETTINGS_PATH. Run '$BIN_NAME configure' in a terminal."
+    echo "未找到模型配置文件：$SETTINGS_PATH。请在交互式终端运行 '$BIN_NAME configure'。"
   fi
 fi
 
 echo
-echo "Starting codex-shim..."
+echo "正在启动 codex-shim..."
 "$INSTALLED_BIN" --settings "$SETTINGS_PATH" --port "$PORT" start
 echo
-echo "Next commands:"
+echo "后续常用命令："
 echo "  $BIN_NAME list"
-echo "  $BIN_NAME enable        # write the managed ~/.codex/config.toml block"
+echo "  $BIN_NAME enable        # 写入 ~/.codex/config.toml 托管配置"
 echo "  $BIN_NAME model use <slug>"

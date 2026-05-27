@@ -178,21 +178,21 @@ impl Args {
 fn print_help() {
     println!(
         "codex-shim-cli\n\n\
-Usage:\n\
+用法:\n\
   codex-shim-cli [--settings PATH] [--port PORT] <command>\n\n\
-Commands:\n\
-  configure           Interactively add a model/API key to ~/.codex-shim/models.json\n\
-  generate            Generate Codex catalog/config under ~/.codex-shim/cli\n\
-  start               Start the Rust shim daemon on 127.0.0.1:8765\n\
-  enable              Start daemon and install the managed ~/.codex/config.toml block\n\
-  stop                Stop daemon\n\
-  disable             Restore Codex config and stop daemon\n\
-  restart             Restart daemon\n\
-  status              Health check + model count\n\
-  list                List configured models\n\
-  model list          List configured models\n\
-  model use <slug>    Select a model in ~/.codex/config.toml\n\
-  codex -- <args...>  Run Codex CLI with shim config overrides\n"
+命令:\n\
+  configure           交互式添加模型和 API Key 到 ~/.codex-shim/models.json\n\
+  generate            生成 Codex catalog/config 到 ~/.codex-shim/cli\n\
+  start               启动 127.0.0.1:8765 上的 Rust shim 守护进程\n\
+  enable              启动守护进程并写入 ~/.codex/config.toml 托管配置\n\
+  stop                停止守护进程\n\
+  disable             恢复 Codex 配置并停止守护进程\n\
+  restart             重启守护进程\n\
+  status              健康检查和模型数量\n\
+  list                列出已配置模型\n\
+  model list          列出已配置模型\n\
+  model use <slug>    在 ~/.codex/config.toml 中选择模型\n\
+  codex -- <args...>  使用 shim 配置覆盖项运行 Codex CLI\n"
     );
 }
 
@@ -210,10 +210,10 @@ async fn generate(settings_path: &Path, port: u16) -> AppResult<()> {
         auth.passthrough_available,
     )
     .await?;
-    println!("Generated {} model entries:", models.len());
+    println!("已生成 {} 个模型条目：", models.len());
     println!("  catalog: {}", catalog_path.display());
     println!("  config:  {}", config_path.display());
-    println!("No files under ~/.codex were modified.");
+    println!("未修改 ~/.codex 下的文件。");
     Ok(())
 }
 
@@ -242,7 +242,7 @@ async fn list_models(settings_path: &Path) -> AppResult<()> {
     );
     if rows.is_empty() {
         return Err(AppError::msg(
-            "No models available. Run `codex-shim-cli configure` or `codex login`.",
+            "没有可用模型。请运行 `codex-shim-cli configure` 或 `codex login`。",
         ));
     }
     let width = rows.iter().map(|row| row.0.len()).max().unwrap_or(0);
@@ -257,11 +257,11 @@ async fn start_daemon(settings_path: &Path, port: u16) -> AppResult<()> {
     if let Some(pid) = read_pid(&pid_path).await {
         if pid_running(pid) {
             if healthy(port).await {
-                println!("Shim already running with pid {pid}.");
+                println!("Shim 已在运行，pid 为 {pid}。");
                 return Ok(());
             }
             return Err(AppError::msg(format!(
-                "Shim pid {pid} is running, but http://{}:{port}/health is not healthy. Run `codex-shim-cli stop` before changing ports.",
+                "Shim pid {pid} 正在运行，但 http://{}:{port}/health 不健康。切换端口前请先运行 `codex-shim-cli stop`。",
                 paths::DEFAULT_HOST
             )));
         }
@@ -318,22 +318,22 @@ async fn start_daemon(settings_path: &Path, port: u16) -> AppResult<()> {
     for _ in 0..50 {
         if healthy(port).await {
             println!(
-                "Shim started on http://{}:{port} with pid {pid}.",
+                "Shim 已启动：http://{}:{port}，pid 为 {pid}。",
                 paths::DEFAULT_HOST
             );
-            println!("Log: {}", log_path.display());
+            println!("日志文件：{}", log_path.display());
             return Ok(());
         }
         if let Some(status) = child.try_wait()? {
             return Err(AppError::msg(format!(
-                "Shim exited during startup with status {status}. See {}.",
+                "Shim 启动过程中退出，状态为 {status}。请查看 {}。",
                 log_path.display()
             )));
         }
         sleep(Duration::from_millis(100)).await;
     }
     Err(AppError::msg(format!(
-        "Shim process started but health check timed out. See {}.",
+        "Shim 进程已启动，但健康检查超时。请查看 {}。",
         log_path.display()
     )))
 }
@@ -341,25 +341,25 @@ async fn start_daemon(settings_path: &Path, port: u16) -> AppResult<()> {
 async fn stop_daemon() -> AppResult<()> {
     let pid_path = paths::pid_path();
     let Some(pid) = read_pid(&pid_path).await else {
-        println!("Shim is not running.");
+        println!("Shim 未运行。");
         return Ok(());
     };
     if !pid_running(pid) {
         let _ = fs::remove_file(&pid_path).await;
-        println!("Shim is not running.");
+        println!("Shim 未运行。");
         return Ok(());
     }
     terminate_pid(pid).await?;
     for _ in 0..50 {
         if !pid_running(pid) {
             let _ = fs::remove_file(&pid_path).await;
-            println!("Shim stopped.");
+            println!("Shim 已停止。");
             return Ok(());
         }
         sleep(Duration::from_millis(100)).await;
     }
     Err(AppError::msg(format!(
-        "Shim pid {pid} did not exit after SIGTERM."
+        "Shim pid {pid} 收到 SIGTERM 后仍未退出。"
     )))
 }
 
@@ -373,7 +373,7 @@ async fn status(port: u16) -> AppResult<()> {
             .map(|value| value.to_string())
             .unwrap_or_else(|| "unknown".to_string());
         println!(
-            "Shim is running on http://{}:{port} with pid {} ({models} models).",
+            "Shim 正在运行：http://{}:{port}，pid 为 {}（{models} 个模型）。",
             paths::DEFAULT_HOST,
             pid.unwrap()
         );
@@ -381,12 +381,12 @@ async fn status(port: u16) -> AppResult<()> {
     }
     if running {
         return Err(AppError::msg(format!(
-            "Shim process {} exists but health check failed: {}",
+            "Shim 进程 {} 存在，但健康检查失败：{}",
             pid.unwrap(),
             health.error.unwrap_or_else(|| "unknown error".to_string())
         )));
     }
-    Err(AppError::msg("Shim is stopped."))
+    Err(AppError::msg("Shim 已停止。"))
 }
 
 async fn serve(settings_path: PathBuf, port: u16) -> AppResult<()> {
@@ -417,23 +417,20 @@ async fn install_codex_config(
     )
     .await?;
     println!(
-        "Installed shim config into {}.",
+        "已写入 shim 配置到 {}。",
         paths::codex_config_path().display()
     );
-    println!("Active Codex shim model: {slug}");
+    println!("当前 Codex shim 模型：{slug}");
     Ok(())
 }
 
 async fn restore_codex_config() -> AppResult<()> {
     let restored = config::restore_codex_config(&paths::codex_config_path()).await?;
     if restored {
-        println!(
-            "Restored original {}.",
-            paths::codex_config_path().display()
-        );
+        println!("已恢复原始配置 {}。", paths::codex_config_path().display());
     } else {
         println!(
-            "Removed shim config from {}.",
+            "已从 {} 移除 shim 配置。",
             paths::codex_config_path().display()
         );
     }
@@ -456,7 +453,7 @@ async fn resolve_model_slug(
             return Ok("gpt-5.5".to_string());
         }
         return Err(AppError::msg(
-            "gpt-5.5 passthrough requires `codex login` so ~/.codex/auth.json contains tokens.access_token.",
+            "gpt-5.5 passthrough 需要先运行 `codex login`，确保 ~/.codex/auth.json 包含 tokens.access_token。",
         ));
     }
     if let Some(model) = models.iter().find(|model| model.slug == requested) {
@@ -484,12 +481,12 @@ async fn resolve_model_slug(
     }
     if !matches.is_empty() {
         return Err(AppError::msg(format!(
-            "Ambiguous model {requested:?}. Matches: {}",
+            "模型 {requested:?} 不唯一。匹配项：{}",
             matches.join(", ")
         )));
     }
     Err(AppError::msg(format!(
-        "Unknown shim model {requested:?}. Run: codex-shim-cli model list"
+        "未知 shim 模型 {requested:?}。请运行：codex-shim-cli model list"
     )))
 }
 
@@ -530,16 +527,16 @@ async fn exec_codex(settings_path: &Path, port: u16, args: Vec<String>) -> AppRe
     if status.success() {
         Ok(())
     } else {
-        Err(AppError::msg(format!("codex exited with status {status}")))
+        Err(AppError::msg(format!("codex 退出状态：{status}")))
     }
 }
 
 async fn configure(settings_path: &Path) -> AppResult<()> {
     if !io::stdin().is_terminal() {
-        return Err(AppError::msg("configure requires an interactive terminal"));
+        return Err(AppError::msg("configure 需要在交互式终端中运行"));
     }
-    println!("Configure a BYOK model in {}", settings_path.display());
-    println!("Press Enter to accept defaults in brackets.");
+    println!("正在配置 BYOK 模型：{}", settings_path.display());
+    println!("方括号内是默认值，直接回车即可使用默认值。");
     println!();
     print_provider_menu();
 
@@ -552,11 +549,11 @@ async fn configure(settings_path: &Path) -> AppResult<()> {
         "volcengine" => "https://ark.cn-beijing.volces.com/api/v3",
         _ => "https://api.openai.com/v1",
     };
-    let base_url = prompt_default("base_url", default_base_url)?;
-    let model = prompt_required("model")?;
-    let display_name = prompt_default("display_name", &model)?;
-    let api_key = prompt_secret("api_key")?;
-    let no_image_support = prompt_default("no_image_support true/false", "false")?
+    let base_url = prompt_default("base_url，上游 API 根地址", default_base_url)?;
+    let model = prompt_required("model，上游模型名称")?;
+    let display_name = prompt_default("display_name，Codex 中展示的名称", &model)?;
+    let api_key = prompt_secret("api_key，上游 API Key")?;
+    let no_image_support = prompt_default("该模型是否不支持图片？true/false", "false")?
         .parse::<bool>()
         .unwrap_or(false);
 
@@ -574,26 +571,26 @@ async fn configure(settings_path: &Path) -> AppResult<()> {
         models::validate(row)?;
     }
     models::write_file(settings_path, &file).await?;
-    println!("Saved model config to {}.", settings_path.display());
-    println!("API keys stay in this settings file and are not copied into generated Codex catalog/config.");
+    println!("模型配置已保存到：{}", settings_path.display());
+    println!("API Key 只保存在该配置文件中，不会写入生成的 Codex catalog/config。");
     Ok(())
 }
 
 fn print_provider_menu() {
     println!(
-        "Providers:\n\
+        "请选择 provider：\n\
   1) openai      https://api.openai.com/v1\n\
   2) anthropic  https://api.anthropic.com/v1\n\
   3) deepseek   https://api.deepseek.com\n\
   4) moonshot   https://api.moonshot.cn/v1\n\
   5) dashscope  https://dashscope.aliyuncs.com/compatible-mode/v1\n\
   6) volcengine https://ark.cn-beijing.volces.com/api/v3\n\
-  7) custom     OpenAI-compatible chat-completions gateway"
+  7) custom     兼容 OpenAI chat-completions 的自定义网关"
     );
 }
 
 fn prompt_provider() -> AppResult<String> {
-    let value = prompt_default("provider name or number", "1")?;
+    let value = prompt_default("provider 名称或编号", "1")?;
     let provider = match value.trim() {
         "1" | "openai" => "openai",
         "2" | "anthropic" => "anthropic",
@@ -613,7 +610,7 @@ fn prompt_required(label: &str) -> AppResult<String> {
         if !value.trim().is_empty() {
             return Ok(value.trim().to_string());
         }
-        eprintln!("{label} is required.");
+        eprintln!("{label} 必填。");
     }
 }
 
