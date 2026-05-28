@@ -7,6 +7,62 @@ and this project does not yet follow semantic versioning (pre-1.0).
 
 ## Unreleased
 
+## 0.6.0 — 2026-05-29
+
+### 中文
+
+#### 新增
+
+- Tauri 控制台新增完整视觉改版：Dashboard 首屏改为非对称工作台布局，包含
+  daemon 路由状态、endpoint、active model、模型数量和当前连接信息。
+- 前端图标系统切换到 `@radix-ui/react-icons`，替换原有字符图标，并新增
+  SVG favicon，避免浏览器调试时出现 favicon 404。
+
+#### 优化
+
+- 重写全局界面样式，统一 Sidebar、Topbar、按钮、卡片、表格、表单、弹窗、
+  toast、空态、错误态、focus ring 和深色模式 token。
+- Dashboard 控制区重新分组为主连接信息和右侧 daemon 操作栏，移动端折叠为
+  单列布局，390px 宽度下无横向溢出。
+- Models 表格、模型表单、日志页和设置页继承新的视觉层级，减少默认管理台感。
+
+#### 验证
+
+- `npm run build`
+- `git diff --check`
+- Vite + Playwright 浏览器检查：Dashboard 桌面视口、390px 移动视口、Models
+  弹窗均能渲染，移动视口 `scrollWidth === clientWidth`。
+
+### English
+
+#### Added
+
+- Added a full visual redesign for the Tauri control app. The Dashboard now has
+  an asymmetric workstation layout with daemon route state, endpoint, active
+  model, model count, and current connection details.
+- Switched the frontend icon system to `@radix-ui/react-icons`, replacing the
+  previous text-symbol icons, and added an SVG favicon to remove browser
+  favicon 404 noise during debugging.
+
+#### Changed
+
+- Reworked the global UI system across Sidebar, Topbar, buttons, cards, tables,
+  forms, modals, toast, empty states, error states, focus rings, and dark-mode
+  tokens.
+- Reorganized Dashboard controls into primary connection details plus a right
+  daemon action rail. Mobile collapses to a single-column layout with no
+  horizontal overflow at 390px.
+- Models tables, model forms, Logs, and Settings now inherit the new visual
+  hierarchy instead of the previous default admin-console feel.
+
+#### Verified
+
+- `npm run build`
+- `git diff --check`
+- Vite + Playwright browser checks: Dashboard desktop viewport, 390px mobile
+  viewport, and Models modal rendered correctly; mobile
+  `scrollWidth === clientWidth`.
+
 ## 0.5.0 — 2026-05-28
 
 ### 中文

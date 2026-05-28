@@ -1,6 +1,6 @@
 [package]
 name = "codex-shim-cli"
-version = "0.5.0"
+version = "0.6.0"
 description = "Lightweight Rust CLI and local Responses API shim for Codex."
 authors = ["codex-shim contributors"]
 edition = "2021"

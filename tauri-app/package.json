@@ -1,7 +1,7 @@
 {
   "name": "codex-shim-control",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "module",
   "description": "Desktop control panel for the codex-shim daemon.",
   "scripts": {
@@ -13,6 +13,7 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@radix-ui/react-icons": "^1.3.2",
     "@tauri-apps/api": "^2.1.1",
     "@tauri-apps/plugin-dialog": "^2.0.1",
     "@tauri-apps/plugin-opener": "^2.0.0",

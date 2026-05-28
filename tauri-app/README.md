@@ -31,6 +31,18 @@ code inside the app.
 
 ## 最近的 UI / 稳定性改进
 
+- **v0.6.0 / 2026-05-29**
+  - 中文：Dashboard 改为非对称工作台布局，首屏直接展示 daemon 路由状态、
+    endpoint、active model、模型数量和当前连接信息。全局视觉系统同步重写，
+    Sidebar、Topbar、按钮、卡片、表格、表单、弹窗、toast、空态、错误态和
+    focus ring 使用统一 token。前端图标切换到 `@radix-ui/react-icons`，并新增
+    SVG favicon。移动端 390px 宽度下 Dashboard 无横向溢出。
+  - English: Dashboard now uses an asymmetric workstation layout that surfaces
+    daemon route state, endpoint, active model, model count, and current
+    connection details up front. The global UI system was rewritten across the
+    sidebar, topbar, buttons, cards, tables, forms, modals, toast, empty/error
+    states, and focus rings. Frontend icons now use `@radix-ui/react-icons`,
+    with an SVG favicon added. Dashboard has no horizontal overflow at 390px.
 - **v0.5.0 / 2026-05-28**
   - 中文：`start.sh` 在缺少 Rust 时可交互式引导安装 `rustup`，降低首次安装
     `codex-shim-cli` 的成本。Rust CLI 新增 `patch-app` / `restore-app`，可直接
@@ -76,9 +88,6 @@ code inside the app.
     matching Rust-side validation. The shim also gates `thinking` per
     provider/model and normalizes MiniMax `reasoning_details[]` into Codex
     reasoning output.
-- Dashboard、Models、Active、Logs、Settings 统一了卡片层级、按钮图标、状态色
-  token、focus ring、toast 和错误样式。
-- Dashboard 移动端改为单列页面与稳定的两列操作区，按钮不再因中文换行被压成竖排。
 - Models 弹窗补齐 `role="dialog"`、焦点陷阱、Esc 关闭、焦点恢复和字段 label 绑定。
 - App 入口增加 error boundary，单个 tab 渲染失败时不会拖垮整个窗口。
 - 健康检查和日志自动刷新改为自适应轮询：请求不重入，页面隐藏时暂停。

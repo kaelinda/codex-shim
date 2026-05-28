@@ -133,6 +133,11 @@ model, importing/exporting provider config, checking GitHub Releases for
 updates, updating the CLI helper, tailing logs, launching Codex Desktop, or
 applying the macOS picker patch.
 
+As of v0.6.0, the app Dashboard has been redesigned as a workstation-style
+control surface with route state, endpoint, active model, connection details,
+and daemon actions visible up front, including a mobile layout without
+horizontal overflow.
+
 Download the latest signed release bundle:
 https://github.com/kaelinda/codex-shim/releases/latest
 
