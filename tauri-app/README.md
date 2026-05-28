@@ -31,6 +31,18 @@ code inside the app.
 
 ## 最近的 UI / 稳定性改进
 
+- **v0.5.0 / 2026-05-28**
+  - 中文：`start.sh` 在缺少 Rust 时可交互式引导安装 `rustup`，降低首次安装
+    `codex-shim-cli` 的成本。Rust CLI 新增 `patch-app` / `restore-app`，可直接
+    打 macOS Codex Desktop picker 补丁，并从备份撤销补丁、恢复原始
+    `app.asar` / `Info.plist`。App 图标源图同步改为 Apple HIG 交付友好的
+    1024×1024 不透明正方形，并重新生成全套 Tauri 图标资源。
+  - English: `start.sh` can now guide first-time Rust installation through
+    `rustup` when `cargo` / `rustc` are missing. The Rust CLI adds
+    `patch-app` / `restore-app` for patching the macOS Codex Desktop picker and
+    restoring the original `app.asar` / `Info.plist` from backup. The app icon
+    source is now a 1024×1024 opaque square suitable for Apple HIG handoff, with
+    the full Tauri icon set regenerated.
 - **v0.4.0 / 2026-05-27**
   - 中文：Models 页新增 provider 配置导入、导出和脱敏导出；Settings 页新增
     GitHub Releases 检查、App 下载入口和 CLI 更新按钮。Rust CLI 同步新增

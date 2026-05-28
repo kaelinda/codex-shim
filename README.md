@@ -111,6 +111,8 @@ codex-shim-cli import ./models.json
 codex-shim-cli version
 codex-shim-cli update          # check GitHub Releases for a newer version
 codex-shim-cli update --install
+codex-shim-cli patch-app       # patch macOS Codex Desktop model picker
+codex-shim-cli restore-app     # undo the patch and restore original Codex files
 codex-shim-cli model use gpt-5.5
 codex-shim-cli stop
 ```
@@ -538,10 +540,14 @@ The CLI also has helper commands for patching/restoring `app.asar`:
 ```bash
 codex-shim patch-app
 codex-shim restore-app
+
+# Rust CLI installed by start.sh:
+codex-shim-cli patch-app
+codex-shim-cli restore-app
 ```
 
 If Codex still crashes after `patch-app`, use the manual hash-update steps above
-or restore with `codex-shim restore-app`.
+or restore with `codex-shim restore-app` / `codex-shim-cli restore-app`.
 
 ---
 
@@ -801,6 +807,8 @@ codex-shim-cli version        print the installed CLI version
 codex-shim-cli update         check GitHub Releases for a newer version
 codex-shim-cli update --install
                              run start.sh to reinstall the CLI from the latest release/tag
+codex-shim-cli patch-app      patch macOS Codex Desktop picker allowlist
+codex-shim-cli restore-app    restore original Codex Desktop app.asar from backup
 codex-shim app [path]        launch Codex Desktop through managed shim config
 codex-shim patch-app         patch macOS Codex Desktop picker allowlist
 codex-shim restore-app       restore macOS app.asar from patch backup
@@ -815,7 +823,9 @@ Global flags:
 - `--port <port>`: used by daemon/provider flows.
 
 `patch-app` and `restore-app` always target `/Applications/Codex.app` and do not
-use `--settings`.
+use `--settings`. `codex-shim-cli patch-app` saves the original `app.asar` and
+`Info.plist` under `~/.codex-shim/cli/`; run `codex-shim-cli restore-app` to
+remove the picker patch and restore the original Codex Desktop bundle files.
 
 ---
 

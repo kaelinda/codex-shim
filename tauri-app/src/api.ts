@@ -108,7 +108,7 @@ function mockData(key: string, args: unknown[]): unknown {
         log_path: "~/.codex-shim/app/shim.log",
         default_port: 8765,
         platform: "macos",
-        app_version: "0.3.0",
+        app_version: "0.5.0",
       };
     case "appSettings":
       return { settings_path: "~/.codex-shim/models.json", port: 8765 };
@@ -129,17 +129,17 @@ function mockData(key: string, args: unknown[]): unknown {
       return null;
     case "checkUpdate":
       return {
-        current_version: "0.3.0",
-        latest_version: "0.4.0",
-        latest_tag: "v0.4.0",
-        update_available: true,
+        current_version: "0.5.0",
+        latest_version: "0.5.0",
+        latest_tag: "v0.5.0",
+        update_available: false,
         repo: "kaelinda/codex-shim",
         release_url: "https://github.com/kaelinda/codex-shim/releases/latest",
         release_notes: "Mock release notes",
         assets: [],
-        install_ref: "v0.4.0",
+        install_ref: "v0.5.0",
         install_command:
-          "CODEX_SHIM_REF=v0.4.0 bash -c \"$(curl -fsSL https://raw.githubusercontent.com/kaelinda/codex-shim/v0.4.0/start.sh)\"",
+          "CODEX_SHIM_REF=v0.5.0 bash -c \"$(curl -fsSL https://raw.githubusercontent.com/kaelinda/codex-shim/v0.5.0/start.sh)\"",
         checked_at: Math.floor(Date.now() / 1000),
       };
     case "readModels":

@@ -1,7 +1,7 @@
 {
   "name": "codex-shim-control",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "description": "Desktop control panel for the codex-shim daemon.",
   "scripts": {

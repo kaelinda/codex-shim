@@ -7,11 +7,78 @@ and this project does not yet follow semantic versioning (pre-1.0).
 
 ## Unreleased
 
-### Added
+## 0.5.0 — 2026-05-28
 
-- Allow custom OpenAI-compatible provider names such as `new-api` in both the
-  Python shim and Tauri app. Any provider except `anthropic` now routes through
-  `/chat/completions`.
+### 中文
+
+#### 新增
+
+- `codex-shim-cli` 新增 `patch-app` / `restore-app`，远程 `start.sh` 安装后的
+  Rust CLI 现在可以直接给 macOS Codex Desktop 模型选择器打补丁，也可以撤销补丁并
+  恢复原始 Codex Desktop bundle 文件。
+- `patch-app` 会保存原始 `app.asar` 和 `Info.plist` 到 `~/.codex-shim/cli/`；
+  `restore-app` 会从备份恢复原始文件并重新签名 `Codex.app`。如果 Tauri 控制台已经
+  生成过 `~/.codex-shim/app/` 备份，CLI 会复用该备份。
+- `start.sh` 支持自动安装 Rust：当缺少 `cargo` / `rustc` 时，会在交互式终端中引导
+  运行 `rustup` 安装，降低首次安装 `codex-shim-cli` 的成本。
+- 刷新 macOS app icon：源图改为符合 Apple HIG 交付预期的 1024×1024 不透明正方形，
+  并重新生成 Tauri 全套图标资源。
+
+#### 修复
+
+- 当 CLI 检测到 Codex Desktop 已经打过 picker 补丁但找不到原始备份时，会拒绝继续
+  覆盖备份，避免把已修改的 `app.asar` 误当作原始文件。
+
+#### 验证
+
+- `python3.11 -m compileall codex_shim -q`
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest -p pytest_asyncio.plugin tests/ -q`
+- `cargo check --offline`（`tauri-app/src-tauri`）
+- `cargo test --offline`（`tauri-app/src-tauri`）
+- `cargo check`（`cli`）
+- `cargo test`（`cli`）
+- `apple-app-icon-hig` 图标自检：源图与基础 PNG 均为完整不透明正方形，`.icns` 包含
+  16×16 到 1024×1024 标准尺寸。
+- `npm run build`
+- `npm run tauri:build`
+- `git diff --check`
+
+### English
+
+#### Added
+
+- Added `codex-shim-cli patch-app` / `restore-app`, so the Rust CLI installed
+  by the remote `start.sh` flow can patch the macOS Codex Desktop model picker
+  and undo that patch by restoring the original Codex Desktop bundle files.
+- `patch-app` saves the original `app.asar` and `Info.plist` under
+  `~/.codex-shim/cli/`; `restore-app` restores them and re-signs `Codex.app`.
+  If the Tauri control app already created backups under `~/.codex-shim/app/`,
+  the CLI reuses them.
+- `start.sh` can now install Rust automatically: when `cargo` / `rustc` are
+  missing, it guides interactive terminals through `rustup` installation before
+  building `codex-shim-cli`.
+- Refreshed the macOS app icon: the source is now a 1024×1024 opaque square
+  suitable for Apple HIG handoff, and the full Tauri icon set was regenerated.
+
+#### Fixed
+
+- If the CLI detects an already-patched Codex Desktop picker without an original
+  backup, it refuses to overwrite the backup, avoiding a modified `app.asar`
+  being treated as the original file.
+
+#### Verified
+
+- `python3.11 -m compileall codex_shim -q`
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3.11 -m pytest -p pytest_asyncio.plugin tests/ -q`
+- `cargo check --offline` (`tauri-app/src-tauri`)
+- `cargo test --offline` (`tauri-app/src-tauri`)
+- `cargo check` (`cli`)
+- `cargo test` (`cli`)
+- `apple-app-icon-hig` icon audit: source and base PNG files are full opaque
+  squares, and `.icns` includes standard 16×16 through 1024×1024 sizes.
+- `npm run build`
+- `npm run tauri:build`
+- `git diff --check`
 
 ## 0.4.0 — 2026-05-27
 

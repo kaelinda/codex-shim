@@ -7,7 +7,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use error::{AppError, AppResult};
 use reqwest::header::{HeaderName, HeaderValue, CONTENT_TYPE};
 use serde_json::{json, Value};
-use tokio::fs::{self, OpenOptions};
+use sha2::{Digest, Sha256};
+use tokio::fs::{self, File, OpenOptions};
+use tokio::io::AsyncReadExt;
 use tokio::process::Command as TokioCommand;
 use tokio::time::sleep;
 
@@ -69,6 +71,8 @@ async fn run() -> AppResult<()> {
             Ok(())
         }
         CommandSpec::Update { install } => update_cli(install).await,
+        CommandSpec::PatchApp => patch_codex_app().await,
+        CommandSpec::RestoreApp => restore_codex_app_bundle().await,
         CommandSpec::Serve => serve(parsed.settings, parsed.port).await,
         CommandSpec::ModelList => list_models(&parsed.settings).await,
         CommandSpec::ModelUse(slug) => {
@@ -111,6 +115,8 @@ enum CommandSpec {
     Test(String),
     Version,
     Update { install: bool },
+    PatchApp,
+    RestoreApp,
     Serve,
     ModelList,
     ModelUse(String),
@@ -170,6 +176,8 @@ impl Args {
             Some("update") | Some("upgrade") => {
                 parse_update_command(raw.get(idx + 1..).unwrap_or_default())?
             }
+            Some("patch-app") => CommandSpec::PatchApp,
+            Some("restore-app") | Some("unpatch-app") => CommandSpec::RestoreApp,
             Some("config") => match raw.get(idx + 1).map(String::as_str) {
                 Some("export") => parse_export_command(raw.get(idx + 2..).unwrap_or_default())?,
                 Some("import") => parse_import_command(raw.get(idx + 2..).unwrap_or_default())?,
@@ -290,6 +298,8 @@ fn print_help() {
   test <name>         测试指定 provider、slug 或上游模型是否可用\n\
   version             显示当前 CLI 版本\n\
   update [--install]  检查 GitHub Releases 更新，--install 会重新安装 CLI\n\
+  patch-app           给 macOS Codex Desktop 模型选择器打补丁\n\
+  restore-app         撤销补丁，恢复原始 Codex Desktop app.asar\n\
   model list          列出已配置模型\n\
   model use <slug>    在 ~/.codex/config.toml 中选择模型\n\
   codex -- <args...>  使用 shim 配置覆盖项运行 Codex CLI\n"
@@ -525,6 +535,309 @@ async fn update_cli(install: bool) -> AppResult<()> {
             .map(|status| status.to_string())
             .unwrap_or_else(|| "-".to_string())
     )))
+}
+
+const CODEX_APP_BUNDLE: &str = "/Applications/Codex.app";
+const CODEX_APP_ASAR: &str = "/Applications/Codex.app/Contents/Resources/app.asar";
+const CODEX_INFO_PLIST: &str = "/Applications/Codex.app/Contents/Info.plist";
+const ASAR_BACKUP_NAME: &str = "app.asar.before-codex-shim-model-picker-patch";
+const INFO_PLIST_BACKUP_NAME: &str = "Info.plist.before-codex-shim-model-picker-patch";
+const PICKER_NEEDLE: &str = "let u=c.useHiddenModels&&o!==`amazonBedrock`,d;";
+const PICKER_REPLACEMENT: &str = "let u=!1,d;";
+
+async fn patch_codex_app() -> AppResult<()> {
+    ensure_macos_app_patch_supported("patch-app")?;
+
+    let app_asar = PathBuf::from(CODEX_APP_ASAR);
+    let info_plist = PathBuf::from(CODEX_INFO_PLIST);
+    let runtime = paths::app_runtime_dir();
+    let backup = import_known_backup(ASAR_BACKUP_NAME).await?;
+    let plist_backup = import_known_backup(INFO_PLIST_BACKUP_NAME).await?;
+    let workdir = runtime.join("app-asar-work");
+
+    if !app_asar.exists() {
+        return Err(AppError::msg(format!(
+            "未找到 Codex Desktop：{}",
+            app_asar.display()
+        )));
+    }
+    if which::which("npx").is_err() {
+        return Err(AppError::msg(
+            "patch-app 需要 npx 来解包 Electron ASAR，请先安装 Node.js/npm。",
+        ));
+    }
+
+    fs::create_dir_all(&runtime).await?;
+    let _ = quit_codex_app().await;
+    if workdir.exists() {
+        fs::remove_dir_all(&workdir).await?;
+    }
+    fs::create_dir_all(&workdir).await?;
+
+    run_command(
+        "npx",
+        &[
+            "--yes",
+            "asar",
+            "extract",
+            &app_asar.display().to_string(),
+            &workdir.display().to_string(),
+        ],
+    )
+    .await?;
+
+    let Some(bundle_file) =
+        find_model_queries_bundle(&workdir, PICKER_NEEDLE, PICKER_REPLACEMENT).await?
+    else {
+        return Err(AppError::msg(
+            "未找到 Codex Desktop 模型选择器过滤逻辑，当前 Codex 版本可能已变更。",
+        ));
+    };
+
+    let text = fs::read_to_string(&bundle_file).await.unwrap_or_default();
+    if text.contains(PICKER_REPLACEMENT) {
+        if !backup.exists() {
+            return Err(AppError::msg(
+                "Codex Desktop 模型选择器补丁已存在，但未找到原始 app.asar 备份，无法保证可撤销。请用手动备份恢复 Codex.app。",
+            ));
+        }
+        println!("Codex Desktop 模型选择器补丁已存在，无需重复修改。");
+    } else if text.contains(PICKER_NEEDLE) {
+        if !backup.exists() {
+            fs::copy(&app_asar, &backup).await?;
+            println!("已备份原始 app.asar：{}", backup.display());
+        } else {
+            println!("已存在原始备份：{}", backup.display());
+        }
+        if info_plist.exists() && !plist_backup.exists() {
+            fs::copy(&info_plist, &plist_backup).await?;
+            println!("已备份原始 Info.plist：{}", plist_backup.display());
+        }
+
+        let current_hash = file_sha256(&app_asar).await?;
+        let versioned_backup = runtime.join(format!(
+            "{ASAR_BACKUP_NAME}.{}",
+            current_hash.chars().take(12).collect::<String>()
+        ));
+        if !versioned_backup.exists() {
+            fs::copy(&app_asar, &versioned_backup).await?;
+            println!("已备份当前 app.asar：{}", versioned_backup.display());
+        }
+
+        fs::write(
+            &bundle_file,
+            text.replace(PICKER_NEEDLE, PICKER_REPLACEMENT),
+        )
+        .await?;
+        run_command(
+            "npx",
+            &[
+                "--yes",
+                "asar",
+                "pack",
+                &workdir.display().to_string(),
+                &app_asar.display().to_string(),
+            ],
+        )
+        .await?;
+        println!("已应用 Codex Desktop 模型选择器补丁。");
+        resign_codex_app().await?;
+    } else {
+        return Err(AppError::msg(
+            "未找到可替换的模型选择器过滤逻辑，当前 Codex 版本可能已变更。",
+        ));
+    }
+
+    println!("如需撤销补丁，请运行：codex-shim-cli restore-app");
+    Ok(())
+}
+
+async fn restore_codex_app_bundle() -> AppResult<()> {
+    ensure_macos_app_patch_supported("restore-app")?;
+
+    let app_asar = PathBuf::from(CODEX_APP_ASAR);
+    let info_plist = PathBuf::from(CODEX_INFO_PLIST);
+    let Some(backup) = find_known_backup(ASAR_BACKUP_NAME) else {
+        let expected = paths::app_runtime_dir().join(ASAR_BACKUP_NAME);
+        println!("未找到 app.asar 备份：{}", expected.display());
+        println!("没有需要恢复的 Codex Desktop 补丁。");
+        return Ok(());
+    };
+    let plist_backup = find_known_backup(INFO_PLIST_BACKUP_NAME);
+    if !backup.exists() {
+        println!("未找到 app.asar 备份：{}", backup.display());
+        println!("没有需要恢复的 Codex Desktop 补丁。");
+        return Ok(());
+    }
+    if !app_asar.exists() {
+        return Err(AppError::msg(format!(
+            "未找到 Codex Desktop：{}",
+            app_asar.display()
+        )));
+    }
+
+    let _ = quit_codex_app().await;
+    fs::copy(&backup, &app_asar).await?;
+    println!(
+        "已从备份恢复原始 Codex Desktop app.asar：{}",
+        backup.display()
+    );
+    if let Some(plist_backup) = plist_backup.filter(|_| info_plist.exists()) {
+        fs::copy(&plist_backup, &info_plist).await?;
+        println!(
+            "已从备份恢复原始 Codex Desktop Info.plist：{}",
+            plist_backup.display()
+        );
+    }
+    resign_codex_app().await?;
+    println!("Codex Desktop 补丁已撤销。");
+    Ok(())
+}
+
+async fn import_known_backup(filename: &str) -> AppResult<PathBuf> {
+    let primary = paths::app_runtime_dir().join(filename);
+    if primary.exists() {
+        return Ok(primary);
+    }
+    if let Some(existing) = known_backup_paths(filename)
+        .into_iter()
+        .skip(1)
+        .find(|path| path.exists())
+    {
+        if let Some(parent) = primary.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+        fs::copy(&existing, &primary).await?;
+        println!(
+            "已复用现有备份：{} -> {}",
+            existing.display(),
+            primary.display()
+        );
+    }
+    Ok(primary)
+}
+
+fn find_known_backup(filename: &str) -> Option<PathBuf> {
+    known_backup_paths(filename)
+        .into_iter()
+        .find(|path| path.exists())
+}
+
+fn known_backup_paths(filename: &str) -> Vec<PathBuf> {
+    vec![
+        paths::app_runtime_dir().join(filename),
+        paths::home_dir()
+            .join(".codex-shim")
+            .join("app")
+            .join(filename),
+    ]
+}
+
+fn ensure_macos_app_patch_supported(command: &str) -> AppResult<()> {
+    if cfg!(target_os = "macos") {
+        Ok(())
+    } else {
+        Err(AppError::msg(format!(
+            "{command} 仅支持 macOS，因为它针对 /Applications/Codex.app。"
+        )))
+    }
+}
+
+async fn quit_codex_app() -> AppResult<()> {
+    let script = r#"tell application "Codex" to if it is running then quit"#;
+    let _ = run_quiet("osascript", &["-e", script]).await;
+    sleep(Duration::from_millis(1000)).await;
+    Ok(())
+}
+
+async fn resign_codex_app() -> AppResult<()> {
+    run_command(
+        "codesign",
+        &["--force", "--deep", "--sign", "-", CODEX_APP_BUNDLE],
+    )
+    .await?;
+    println!("已重新签名 Codex.app。");
+    Ok(())
+}
+
+async fn run_quiet(program: &str, args: &[&str]) -> AppResult<()> {
+    let _ = TokioCommand::new(program)
+        .args(args)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .await?;
+    Ok(())
+}
+
+async fn run_command(program: &str, args: &[&str]) -> AppResult<()> {
+    let output = TokioCommand::new(program).args(args).output().await?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let detail = if !stderr.trim().is_empty() {
+        stderr.trim()
+    } else {
+        stdout.trim()
+    };
+    Err(AppError::msg(format!(
+        "命令执行失败：{} {}\n{}",
+        program,
+        args.join(" "),
+        detail
+    )))
+}
+
+async fn file_sha256(path: &Path) -> AppResult<String> {
+    let mut file = File::open(path).await?;
+    let mut buffer = vec![0_u8; 1024 * 1024];
+    let mut hasher = Sha256::new();
+    loop {
+        let read = file.read(&mut buffer).await?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+async fn find_model_queries_bundle(
+    workdir: &Path,
+    needle: &str,
+    replacement: &str,
+) -> AppResult<Option<PathBuf>> {
+    let assets_dir = workdir.join("webview").join("assets");
+    if !assets_dir.exists() {
+        return Ok(None);
+    }
+    let mut read_dir = fs::read_dir(&assets_dir).await?;
+    let mut candidates = Vec::new();
+    while let Some(entry) = read_dir.next_entry().await? {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) == Some("js") {
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
+            let priority = if name.starts_with("model-queries-") {
+                0
+            } else {
+                1
+            };
+            candidates.push((priority, path));
+        }
+    }
+    candidates.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    for (_, path) in candidates {
+        let text = fs::read_to_string(&path).await.unwrap_or_default();
+        if text.contains(needle) || text.contains(replacement) {
+            return Ok(Some(path));
+        }
+    }
+    Ok(None)
 }
 
 #[derive(Debug, Clone)]
@@ -1296,6 +1609,18 @@ mod tests {
             CommandSpec::ImportConfig(path) => assert_eq!(path, PathBuf::from("/tmp/models.json")),
             other => panic!("unexpected command: {other:?}"),
         }
+    }
+
+    #[test]
+    fn parse_accepts_app_patch_commands() {
+        let patch = Args::parse(vec!["patch-app".to_string()]).unwrap();
+        assert!(matches!(patch.command, CommandSpec::PatchApp));
+
+        let restore = Args::parse(vec!["restore-app".to_string()]).unwrap();
+        assert!(matches!(restore.command, CommandSpec::RestoreApp));
+
+        let unpatch_alias = Args::parse(vec!["unpatch-app".to_string()]).unwrap();
+        assert!(matches!(unpatch_alias.command, CommandSpec::RestoreApp));
     }
 
     #[test]
