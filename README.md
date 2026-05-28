@@ -87,10 +87,13 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/kaelinda/codex-shim/main
 Open the script in a browser:
 https://github.com/kaelinda/codex-shim/blob/main/start.sh
 
-`start.sh` builds the standalone Rust binary from `cli/`, installs
-`codex-shim-cli` to `~/.local/bin`, offers an interactive API-key/model setup
-when `~/.codex-shim/models.json` is missing, shows provider/base URL presets,
-and starts the local shim on `127.0.0.1:8765`. Override defaults with
+`start.sh` installs Rust through rustup when `cargo` is missing, builds the
+standalone Rust binary from `cli/`, installs `codex-shim-cli` to
+`~/.local/bin`, offers an interactive API-key/model setup when
+`~/.codex-shim/models.json` is missing, shows provider/base URL presets, and
+starts the local shim on `127.0.0.1:8765`. Set
+`CODEX_SHIM_AUTO_INSTALL_RUST=0` to disable Rust auto-install. Override
+defaults with
 `CODEX_SHIM_INSTALL_DIR`,
 `CODEX_SHIM_SETTINGS`, `CODEX_SHIM_PORT`, `CODEX_SHIM_REPO`,
 `CODEX_SHIM_REF`, or `CODEX_SHIM_SOURCE_DIR`.

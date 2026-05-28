@@ -9,7 +9,7 @@ else
 fi
 CLI_DIR="$ROOT_DIR/cli"
 REPO_URL="${CODEX_SHIM_REPO:-https://github.com/kaelinda/codex-shim.git}"
-REPO_REF="${CODEX_SHIM_REF:-feature/cli}"
+REPO_REF="${CODEX_SHIM_REF:-main}"
 SOURCE_DIR="${CODEX_SHIM_SOURCE_DIR:-$HOME/.codex-shim/source}"
 INSTALL_DIR="${CODEX_SHIM_INSTALL_DIR:-$HOME/.local/bin}"
 BIN_NAME="codex-shim-cli"
@@ -20,9 +20,9 @@ PORT="${CODEX_SHIM_PORT:-8765}"
 print_env_help() {
   cat <<'EOF'
 codex-shim CLI 环境要求：
-  必需工具：git、cargo/rustc
-  安装 Rust：
-    macOS/Linux: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  必需工具：git、curl、cargo/rustc
+  Rust 未安装时，本脚本会自动使用 rustup 安装：
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
   安装 Git：
     macOS: xcode-select --install
     Debian/Ubuntu: sudo apt-get update && sudo apt-get install -y git
@@ -53,6 +53,11 @@ if command -v git >/dev/null 2>&1; then
 else
   echo "  git:   未安装"
 fi
+if command -v curl >/dev/null 2>&1; then
+  echo "  curl:  $(curl --version | head -n 1)"
+else
+  echo "  curl:  未安装"
+fi
 if command -v cargo >/dev/null 2>&1; then
   echo "  cargo: $(cargo --version)"
 else
@@ -65,9 +70,31 @@ else
 fi
 echo
 
-if ! command -v cargo >/dev/null 2>&1; then
-  echo "缺少 cargo，无法构建 Rust CLI。请先安装 Rust，重启终端后重新运行本脚本。" >&2
+if ! command -v curl >/dev/null 2>&1; then
+  echo "缺少 curl，无法自动安装 Rust 或远程下载安装脚本。请先安装 curl 后重新运行。" >&2
   exit 1
+fi
+
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "未检测到 cargo，准备自动安装 Rust 工具链。"
+  echo "安装方式：rustup 官方脚本，默认参数 -y。"
+  if [ "${CODEX_SHIM_AUTO_INSTALL_RUST:-1}" = "0" ]; then
+    echo "已设置 CODEX_SHIM_AUTO_INSTALL_RUST=0，跳过自动安装 Rust。" >&2
+    echo "请先安装 Rust 后重新运行本脚本。" >&2
+    exit 1
+  fi
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+  if [ -f "$HOME/.cargo/env" ]; then
+    # shellcheck disable=SC1091
+    . "$HOME/.cargo/env"
+  else
+    export PATH="$HOME/.cargo/bin:$PATH"
+  fi
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "Rust 安装后仍未找到 cargo。请重启终端后重新运行本脚本。" >&2
+    exit 1
+  fi
+  echo "Rust 安装完成：$(cargo --version)"
 fi
 
 if [ ! -f "$CLI_DIR/Cargo.toml" ]; then
@@ -89,10 +116,10 @@ if [ ! -f "$CLI_DIR/Cargo.toml" ]; then
     rm -rf "$TMP_SOURCE"
     mkdir -p "$(dirname "$SOURCE_DIR")"
     if ! git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$TMP_SOURCE"; then
-      if [ "$REPO_REF" != "feature/cli" ]; then
-        echo "下载指定分支失败，改用 feature/cli 重试。"
+      if [ "$REPO_REF" != "main" ]; then
+        echo "下载指定分支失败，改用 main 重试。"
         rm -rf "$TMP_SOURCE"
-        git clone --depth 1 --branch "feature/cli" "$REPO_URL" "$TMP_SOURCE"
+        git clone --depth 1 --branch "main" "$REPO_URL" "$TMP_SOURCE"
       else
         exit 1
       fi
